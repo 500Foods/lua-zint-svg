@@ -15,28 +15,16 @@
 -- input is consumed as a delimiter. The encoders downstream test for `[` and
 -- emit codeword 102.
 --
--- ------------------------------------------------------------------ scope
---
--- What is NOT ported: `gs1_lint()` and the 900-line AI table behind it in
--- gs1_lint.h, which validates each AI's data against the GS1 General
--- Specifications -- that (01) is fourteen digits with a correct check digit,
--- that (17) is a real date, that (3103) has the right number of decimals, and
--- so on for several hundred AIs with two dozen distinct validator functions.
---
--- It is left out because it cannot change a byte of the output. Its failures
--- split three ways: an unknown AI or a bad length aborts the encode entirely
--- and produces no file at all, and everything else is a *warning* -- zint
--- prints it to stderr and writes exactly the same SVG. Since the task states
--- the input is valid, the abort cases never fire and the warning cases are
--- invisible. Porting it would be several hundred lines that no test can
--- distinguish from an empty function.
---
--- What IS ported is everything structural: the bracket checks, the AI-length
--- checks, the empty-data check, and the reduction itself. Those are cheap,
--- they are what turns malformed input into a clear message rather than a
--- wrong symbol, and the last of them is not optional -- it is the output.
+-- The reduction is the part that changes the bytes. `gs1_lint` (zint/gs1_lint.lua)
+-- checks each AI against the General Specifications after the brackets parse
+-- and before the brackets are stripped. An unknown AI (err 1) or a bad length
+-- (err 2) aborts with no symbol. A backward-incompatible length (err 4) and
+-- any other failure (err 3) are warnings: zint still writes the symbol, and
+-- the reduced string is the one this function would have produced anyway.
+-- Only the last warning is kept, matching the single errtxt buffer.
 
 local common = require "zint.common"
+local lint = require "zint.gs1_lint"
 
 local M = {}
 
@@ -182,7 +170,24 @@ function M.verify(symbol, source)
         return nil, "258: Empty data field in input data"
       end
 
-      -- gs1_lint() would run here. See the scope note at the top.
+      -- backend/gs1.c, the gs1_lint() loop. Abort only for an unknown AI or a
+      -- bad length. err 3 and err 4 set a warning and the encode continues.
+      -- A later failure replaces the text, the same way z_errtxtf overwrites
+      -- symbol->errtxt.
+      local data = source:sub(data_location, data_location + data_length - 1)
+      local ok, lerr = lint.check(ai_value, data)
+      if not ok then
+        if lerr.no == 1 then
+          return nil, string.format("Error 260: Invalid AI (%02d)", ai_value)
+        elseif lerr.no == 2 then
+          return nil, string.format("Error 259: Invalid data length for AI (%02d)", ai_value)
+        elseif lerr.no == 4 then
+          symbol.warning = string.format("Warning 259: Invalid data length for AI (%02d)", ai_value)
+        else
+          symbol.warning = string.format("Warning 261: AI (%02d) position %d: %s",
+            ai_value, lerr.posn, lerr.msg)
+        end
+      end
       i = i + j
     end
     i = i + 1

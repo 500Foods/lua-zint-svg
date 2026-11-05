@@ -376,24 +376,26 @@ end
 -- exactly on the length -- the estimate picks the version, and a version chosen
 -- from a wrong estimate produces a symbol whose data does not fit.
 --
--- The C takes an `eci` parameter and, when it is non-zero, emits an ECI header
--- (mode indicator 7, then the ECI number in 8, 16 or 24 bits) before anything
--- else. That header is NOT emitted here, and the reason is worth being precise
--- about because the obvious reason is wrong:
---
---   The obvious reason -- "the front end has no --eci, so eci is always 0" --
---   does not hold. library.c can pick an ECI *by itself*: when the encoder
---   returns Error 800 for input it cannot fold, `get_best_eci_segs()` finds a
---   character set that fits, sets the segment's ECI and re-runs the encoder,
---   warning 222. So the header is reachable without the flag.
---
--- It is unported because the path that reaches it is unported -- see prep_data,
--- which is where the port stops. `calc_binlen` has the matching gap, and the
--- two have to be filled together or the estimate and the stream disagree.
-local function qr_binary(binary, bp, version, mode, ddata, length, gs1, debug_print)
+-- `eci` is 0 for Latin-1 and for the Shift-JIS fallback. The driver sets it
+-- only on the automatic-ECI retry (warning 222). A non-zero value is a header
+-- before the data: mode indicator 7 in four bits, then the ECI number in 8,
+-- 16, or 24 bits. `calc_binlen` counts the same bits. The two have to agree or
+-- the version chosen from the estimate is the wrong size for the stream.
+local function qr_binary(binary, bp, version, mode, ddata, length, gs1, eci, debug_print)
   local position = 0
   local percent = 0
   local modebits = mode_bits()
+
+  if eci ~= 0 then
+    bp = bin_append(7, 4, binary, bp)
+    if eci <= 127 then
+      bp = bin_append(eci, 8, binary, bp)
+    elseif eci <= 16383 then
+      bp = bin_append(0x8000 + eci, 16, binary, bp)
+    else
+      bp = bin_append(0xC00000 + eci, 24, binary, bp)
+    end
+  end
 
   repeat
     local data_block = mode[position]
@@ -591,7 +593,7 @@ end
 -- Lua table grows on its own, so the parameter is dropped rather than carried
 -- as an ignored argument.
 local function binary_segs(datastream, version, target_codewords, mode, ddata,
-                           length, gs1, debug_print)
+                           length, gs1, eci, debug_print)
   local binary = {}
   local bp = 0
 
@@ -599,7 +601,7 @@ local function binary_segs(datastream, version, target_codewords, mode, ddata,
     bp = bin_append(5, 4, binary, bp)   -- FNC1 in first position
   end
 
-  bp = qr_binary(binary, bp, version, mode, ddata, length, gs1, debug_print)
+  bp = qr_binary(binary, bp, version, mode, ddata, length, gs1, eci, debug_print)
 
   -- Terminator. Up to four zero bits, but fewer if the stream already ends on a
   -- byte boundary AND the symbol is already full -- the condition reads oddly
@@ -675,13 +677,24 @@ end
 -- `qr_binary` to the bit; the two are separate functions in the C and this port
 -- keeps them separate for the same reason -- they are called at different times
 -- with different versions.
-local function calc_binlen(version, mode, ddata, length, mode_preset, gs1, debug_print)
+local function calc_binlen(version, mode, ddata, length, mode_preset, gs1, eci, debug_print)
   if not mode_preset then
     define_mode(mode, ddata, length, gs1, version, debug_print)
   end
 
   local current_mode = " "   -- null: forces a header on the first character
   local count = 0
+
+  if eci ~= 0 then
+    count = count + 4
+    if eci <= 127 then
+      count = count + 8
+    elseif eci <= 16383 then
+      count = count + 16
+    else
+      count = count + 24
+    end
+  end
 
   for i = 0, length - 1 do
     if mode[i] ~= current_mode then
@@ -730,10 +743,10 @@ end
 
 -- backend/qr.c `qr_calc_binlen_segs()`, single segment. The GS1 header is four
 -- bits and has to be counted here as well as emitted in `binary_segs`.
-local function calc_binlen_segs(version, mode, ddata, length, mode_preset, gs1, debug_print)
+local function calc_binlen_segs(version, mode, ddata, length, mode_preset, gs1, eci, debug_print)
   local count = 0
   if gs1 then count = count + 4 end
-  count = count + calc_binlen(version, mode, ddata, length, mode_preset, gs1, debug_print)
+  count = count + calc_binlen(version, mode, ddata, length, mode_preset, gs1, eci, debug_print)
   if debug_print then
     io.stderr:write(("Estimated Binary Length: %d (version %d, gs1 %d)\n")
                     :format(count, version, gs1 and 1 or 0))
@@ -1225,70 +1238,56 @@ local function add_version_info(grid, size, version)
 end
 
 -- backend/qr.c `qr_prep_data()`. Source bytes to `ddata`, an array of code
--- points.
+-- points. One segment. DATA_MODE is unreachable (no --binary).
 --
--- The reachable path: input_mode is UNICODE or GS1 (never DATA -- the front end
--- has no --binary), there is one segment, and its ECI is 0. So the C calls
--- `sjis_utf8_to_eci(0, ...)`, which folds UTF-8 to ISO 8859-1 and then widens
--- each byte to an int. Every ddata value is therefore 0..255, and Kanji mode is
--- unreachable -- UNLESS the fold fails.
+-- ECI 0 tries ISO/IEC 8859-1 first. That is the whole story for `café`,
+-- `Ünicode`, and `£100`: every value is 0..255 and there is no warning.
+-- If Latin-1 fails and the segment ECI is still 0, Shift JIS is next. Success
+-- warns 760 and does not set an ECI, so Kanji mode can be used and the stream
+-- has no ECI header. If Shift JIS fails too, this returns Error 800 (or 242
+-- for a 4-byte scalar) and the driver retries with `symbol.eci` set.
 --
--- WHAT HAPPENS WHEN THE LATIN-1 FOLD FAILS IS NOT PORTED, and it is two
--- fallbacks rather than one. Both are measured in PORTING-NOTES.md rather than
--- silently absent, because the divergence is the loud kind: zint writes a
--- symbol and this port writes nothing.
---
---   1. Shift-JIS. The C retries the fold as Shift-JIS, and on success warns
---      760 and may encode in Kanji mode. Reached by `日本`, `ＡＢＣ`, `мир` --
---      Cyrillic counts, because JIS X 0208 has it. Needs the 1,323-line table
---      in sjis.h plus `u_sjis_int`. Everything downstream is already here:
---      Kanji mode is ported in define_mode, calc_binlen and qr_binary.
---
---   2. Automatic ECI. If Shift-JIS fails too, qrcode() returns Error 800, and
---      library.c catches it, calls `get_best_eci_segs()` to find a character
---      set that does fit, and re-runs the encoder with that ECI -- warning 222.
---      Reached by `€100` (ECI 9) and `中文测试` (ECI 26). Needs the 17
---      single-byte mappers in eci_sb.h (548 lines: ISO 8859-2..16 and
---      cp1250/1251/1252/1256), the ECI header in binary_segs and calc_binlen,
---      and a retry loop in the driver. Notably it does NOT need the big CJK
---      tables -- get_best_eci only tries single-byte sets before falling back
---      to UTF-8.
---
--- Input that folds cleanly to Latin-1 -- `café`, `Ünicode`, `£100` -- takes
--- none of this and is byte-identical today.
---
--- Returns the ddata array (0-based) and its length, or nil plus a message.
-local function prep_data(source, eci_fold)
-  local converted = eci_fold(source)
-  if not converted then
-    return nil, "Error 800: Invalid character in input data"
+-- Returns ddata (0-based), its length, and an optional warning. On failure the
+-- second return is the message.
+local function prep_data(symbol, source)
+  local seg_eci = symbol.eci or 0
+  if seg_eci ~= 20 then
+    local ddata, n = eci.sjis_utf8_to_eci(seg_eci, source)
+    if ddata then return ddata, n end
+    if seg_eci ~= 0 then
+      return nil, string.format("Error 575: Invalid character in input for ECI '%d'", seg_eci)
+    end
   end
-  local ddata = {}
-  for i = 1, #converted do
-    ddata[i - 1] = converted:byte(i)
+  local ddata, n_or_err = eci.sjis_utf8(source)
+  if not ddata then return nil, n_or_err end
+  if seg_eci ~= 20 then
+    return ddata, n_or_err, "Warning 760: Converted to Shift JIS but no ECI specified"
   end
-  return ddata, #converted
+  return ddata, n_or_err
 end
 
 -- backend/qr.c `qrcode()`. The driver.
 --
 -- Resolved away because the front end cannot reach them: --secure (option_1),
--- --vers (option_2), --mask (option_3 high bits), --fast, --structapp and
--- --eci. What is left is the autosize path, which is also the one everybody
--- actually uses.
+-- --vers (option_2), --mask (option_3 high bits), --fast and --structapp.
+-- There is no --eci flag either. `symbol.eci` is still set when the driver
+-- retries a character-set failure; that is the automatic-ECI path, not the flag.
+-- What is left besides that is the autosize path.
 function M.qrcode(symbol, source, opts)
   local debug_print = DEBUG
   local gs1 = (symbol.input_mode & 0x07) == common.GS1_MODE
+  local seg_eci = symbol.eci or 0
 
-  local ddata, length = prep_data(source, eci.utf8_to_latin1)
+  local ddata, length, warning = prep_data(symbol, source)
   if not ddata then return nil, length end
+  if warning then symbol.warning = warning end
 
   local mode = {}
 
   -- Estimate at version 40 first: the character count indicators are widest
   -- there, so the estimate is an upper bound and the version chosen from it can
   -- only be too big, never too small.
-  local est_binlen = calc_binlen_segs(40, mode, ddata, length, false, gs1, debug_print)
+  local est_binlen = calc_binlen_segs(40, mode, ddata, length, false, gs1, seg_eci, debug_print)
 
   -- ECC level starts at L with the matching maximum codeword count. The C
   -- switches on option_1 here; without --secure it is always -1, so L it is --
@@ -1315,7 +1314,7 @@ function M.qrcode(symbol, source, opts)
     -- a defensive re-run, for a case its own comment says should not happen.
     -- An assert that fires is a crash, so there is nothing to reproduce: the
     -- port would have to invent behaviour the C does not have.
-    est_binlen = calc_binlen_segs(autosize, mode, ddata, length, false, gs1, debug_print)
+    est_binlen = calc_binlen_segs(autosize, mode, ddata, length, false, gs1, seg_eci, debug_print)
   end
 
   -- Now see whether the optimised stream fits in a smaller symbol still. Each
@@ -1329,7 +1328,7 @@ function M.qrcode(symbol, source, opts)
     else
       local prev_est_binlen = est_binlen
       for i = 0, length - 1 do prev_mode[i] = mode[i] end
-      est_binlen = calc_binlen_segs(autosize - 1, mode, ddata, length, false, gs1, debug_print)
+      est_binlen = calc_binlen_segs(autosize - 1, mode, ddata, length, false, gs1, seg_eci, debug_print)
 
       if (8 * qrt.data_codewords_L[autosize - 2]) < est_binlen then
         canShrink = false
@@ -1373,7 +1372,7 @@ function M.qrcode(symbol, source, opts)
   end
 
   local datastream, fullstream = {}, {}
-  binary_segs(datastream, version, target_codewords, mode, ddata, length, gs1, debug_print)
+  binary_segs(datastream, version, target_codewords, mode, ddata, length, gs1, seg_eci, debug_print)
   add_ecc(fullstream, datastream, version, target_codewords, blocks)
 
   local size = qrt.sizes[version - 1]

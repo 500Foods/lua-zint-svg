@@ -7,6 +7,10 @@ log refers to was not imported.
 The Code 128 notes below describe the August rule-based encoder. The file
 in this repository is the 2.16.0 dynamic-programming encoder.
 
+Entries 20 and 42 record `gs1_lint` and the QR Shift-JIS / automatic ECI
+paths as left out. Both are in this tree now. Those entries are the
+decision log, not a description of the current code.
+
 # Porting notes — lessons learned
 
 Running tally kept while building the reference solution. Nothing here is read

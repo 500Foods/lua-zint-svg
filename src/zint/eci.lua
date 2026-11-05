@@ -1,25 +1,16 @@
--- zint/eci.lua -- ports backend/eci.c, restricted to the one conversion the
--- symbologies here can reach.
+-- zint/eci.lua -- ports the parts of backend/eci.c the five symbologies reach.
 --
--- The C's `utf8_to_eci` dispatches through a table of 36 conversion functions,
--- one per Extended Channel Interpretation: ISO 8859-2 through -16, Shift JIS,
--- the Windows code pages, Big5, GB 18030, UTF-16 and UTF-32. None of that is
--- reachable from this port. Setting an ECI needs --eci, which the front end
--- here does not accept, and even with it, `library.c` refuses an ECI on any
--- symbology outside its "supports ECI" list -- of the five covered here only QR
--- is on that list, and QR is one of the "elite" symbologies that bypasses this
--- file entirely and does its own character-set handling inside the encoder.
+-- Linear symbols fold UTF-8 to ISO/IEC 8859-1 before the encoder sees it.
+-- That is `utf8_to_latin1`, the ECI 0 / 1 / 3 branch. QR does not: it receives
+-- the UTF-8 and folds it itself. When Latin-1 fails, QR tries Shift JIS
+-- (`sjis_utf8`) and, if that fails too, the driver calls `get_best_eci` and
+-- encodes again. `get_best_eci` tries the single-byte sets in zint/eci_sb.lua
+-- and otherwise returns 26, which means "leave the bytes as UTF-8 and say so
+-- in an ECI header". Big5, GB 2312, and KS X 1001 are not on that path.
 --
--- So the ECI is always 0, and ECI 0 takes a special case at the top of the C
--- function: it is not a table lookup at all but a direct fold to ISO 8859-1.
--- That is what is ported. The rest is left out deliberately rather than
--- forgotten -- a full port would fill this file in, and the shape here leaves
--- room for it.
---
--- Why it matters at all, given the task's data is ASCII: `--esc` makes non-ASCII
--- reachable in one keystroke (`é`), and any UTF-8 in the data goes through
--- here. Skipping the conversion encodes "cafe\xc3\xa9" as five characters where
--- zint encodes four, which is a different barcode, not a rounding difference.
+-- `--esc` makes a non-ASCII byte reachable in one keystroke (`é`). Skipping
+-- the Latin-1 fold encodes "cafe\xc3\xa9" as five characters where zint encodes
+-- four, which is a different barcode, not a rounding difference.
 
 local common = require "zint.common"
 
@@ -59,6 +50,115 @@ function M.utf8_to_latin1(source)
   end
 
   return table.concat(out)
+end
+
+-- backend/eci.c `zint_is_eci_convertible`. ECI 26 is UTF-8, so there is nothing
+-- to convert. The other exclusions are the unassigned numbers above 35, apart
+-- from the two late assignments 170 and 899.
+function M.is_eci_convertible(eci)
+  if eci == 26 or (eci > 35 and eci ~= 170 and eci ~= 899) then
+    return false
+  end
+  return true
+end
+
+local function map_utf8(source, map)
+  local out = {}
+  local state, codepoint = 0, 0
+  local pos, len = 1, #source
+  while pos <= len do
+    repeat
+      state, codepoint = common.decode_utf8(state, codepoint, source:byte(pos))
+      pos = pos + 1
+    until pos > len or state == 0 or state == 12
+    if state ~= 0 then return nil end
+    local byte = map(codepoint)
+    if byte == nil then return nil end
+    out[#out + 1] = string.char(byte)
+  end
+  return table.concat(out)
+end
+
+-- backend/eci.c `zint_utf8_to_eci`, for the ECIs this port can be asked for.
+-- Returns the converted bytes, or nil for ZINT_ERROR_INVALID_DATA. ECI 20 and
+-- the multibyte CJK sets are absent: `get_best_eci` skips 20, and a caller that
+-- does land on 26 takes the raw-byte arm of `sjis_utf8_to_eci` instead.
+function M.utf8_to_eci(eci, source)
+  if eci == 0 or eci == 1 or eci == 3 then
+    return M.utf8_to_latin1(source)
+  end
+  local sb = require "zint.eci_sb"
+  if not sb.has(eci) then return nil end
+  return map_utf8(source, function(u) return sb.byte(eci, u) end)
+end
+
+-- backend/eci.c `zint_get_best_eci`. Lowest single-byte ECI that can hold the
+-- string. 14 and 19 are reserved, and 20 is Shift JIS, which QR has already
+-- tried by the time this runs. If none of them fit, 26 means UTF-8.
+function M.get_best_eci(source)
+  local eci = 3
+  repeat
+    if eci == 14 then
+      eci = 15
+    elseif eci == 19 then
+      eci = 21
+    end
+    if M.utf8_to_eci(eci, source) then return eci end
+    eci = eci + 1
+  until eci >= 25
+  return 26
+end
+
+local function bytes_to_ddata(text)
+  local ddata = {}
+  for i = 1, #text do
+    ddata[i - 1] = text:byte(i)
+  end
+  return ddata, #text
+end
+
+-- backend/eci.c `zint_sjis_utf8_to_eci` with `full_multibyte` off. A convertible
+-- ECI is folded and then each byte is widened to an int. ECI 26 is not
+-- convertible: the UTF-8 bytes are widened as they stand, and the QR encoder
+-- emits an ECI header so a reader knows that.
+function M.sjis_utf8_to_eci(eci, source)
+  if M.is_eci_convertible(eci) then
+    local converted = M.utf8_to_eci(eci, source)
+    if not converted then return nil end
+    return bytes_to_ddata(converted)
+  end
+  return bytes_to_ddata(source)
+end
+
+-- backend/eci.c `zint_sjis_utf8`. One ddata entry per Unicode scalar, which is
+-- why a successful call shortens a multi-byte UTF-8 string. Values above 255
+-- are Shift JIS double-byte characters. 4-byte UTF-8 is rejected here and only
+-- here; the automatic-ECI retry then keeps those bytes under ECI 26.
+function M.sjis_utf8(source)
+  local sjis = require "zint.sjis"
+  local ddata = {}
+  local n = 0
+  local state, codepoint = 0, 0
+  local pos, len = 1, #source
+  while pos <= len do
+    repeat
+      state, codepoint = common.decode_utf8(state, codepoint, source:byte(pos))
+      pos = pos + 1
+    until pos > len or state == 0 or state == 12
+    if state ~= 0 then
+      return nil, "Error 240: Corrupt Unicode data"
+    end
+    if codepoint > 0xFFFF then
+      return nil, "Error 242: Unicode sequences of more than 3 bytes not supported"
+    end
+    local d = sjis.to_int(codepoint)
+    if d == nil then
+      return nil, "Error 800: Invalid character in input"
+    end
+    ddata[n] = d
+    n = n + 1
+  end
+  return ddata, n
 end
 
 return M

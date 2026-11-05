@@ -10,10 +10,13 @@ libzint
 The encoders, the vector geometry, the SVG writer, the GS1 reduction, the ECI
 conversion, the Reed-Solomon code, and the float32 narrowing are a behavioral
 port of libzint from zint 2.16.0 (https://github.com/zint/zint,
-https://zint.org.uk). libzint is Copyright (C) 2008-2025 Robin Stuart
-<rstuart114@gmail.com> and contributors, and is licensed under the
-BSD-3-Clause license. A copy is in vendor/zint/LICENSE. The conditions that
-matter here:
+https://zint.org.uk). The GS1 Application Identifier checks, the QR Shift-JIS
+map, and the single-byte ECI maps are the same kind of port, from `gs1.c`,
+`gs1_lint.h`, `sjis.h`, `eci.c`, and `eci_sb.h`. The package-type list inside
+the GS1 checks keeps the Apache-2.0 note carried by the C. libzint is
+Copyright (C) 2008-2025 Robin Stuart <rstuart114@gmail.com> and contributors,
+and is licensed under the BSD-3-Clause license. A copy is in vendor/zint/LICENSE.
+The conditions that matter here:
 
 1. Redistributions of source code must retain the copyright notice, the
    conditions, and the disclaimer.

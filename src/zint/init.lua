@@ -167,10 +167,9 @@ local GS1_COMPLIANT = {
   [BARCODE_QRCODE]  = true,
 }
 
--- backend/library.c `supports_eci()`, same treatment. Only used for the wording
--- of the empty-input message here, but it is the same list that decides whether
--- library.c retries a failed character-set conversion under a different ECI --
--- a path none of the four linear symbologies can take.
+-- backend/library.c `supports_eci()`, same treatment. It words the empty-input
+-- message, and it is the list that decides whether a failed character-set
+-- conversion is retried under another ECI. Of the five symbologies, only QR.
 local SUPPORTS_ECI = {
   [BARCODE_QRCODE] = true,
 }
@@ -343,6 +342,32 @@ function zint.barcode(opts)
   end
 
   local ok, err = encode(symbol, source, opts)
+
+  -- backend/library.c, the retry after `extended_or_reduced_charset()`. QR is
+  -- the only symbology here that both supports ECI and folds characters itself.
+  -- When that fold fails, the segment ECI is still 0, and the input is Unicode,
+  -- pick the lowest single-byte ECI that fits (or 26, raw UTF-8) and encode
+  -- again. ECI 3 is the default and is not written back; the warning then
+  -- names 0, which is what `first_eci_set` stays at in that case. Latin-1 has
+  -- already failed by the time this runs, so the number that comes back is
+  -- higher. The warning replaces anything the second encode had to say.
+  if not ok and SUPPORTS_ECI[symbology]
+      and (symbol.input_mode & 0x07) == common.UNICODE_MODE
+      and (symbol.eci or 0) == 0
+      and type(err) == "string"
+      and (err:sub(1, 10) == "Error 800:" or err:sub(1, 10) == "Error 242:"
+           or err:sub(1, 10) == "Error 240:") then
+    local best = eci.get_best_eci(source)
+    local reported = 0
+    if best ~= 3 then
+      symbol.eci = best
+      reported = best
+    end
+    ok, err = encode(symbol, source, opts)
+    if ok then
+      symbol.warning = string.format("Warning 222: Encoded data includes ECI %d", reported)
+    end
+  end
   if not ok then return nil, err end
 
   -- backend/library.c, tail of `ZBarcode_Encode_Segs()`. A general fallback for

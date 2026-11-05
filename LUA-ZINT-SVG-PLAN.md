@@ -54,10 +54,10 @@ The shared path is `common.lua` (float32 narrowing so coordinates match zint's `
 
 The harness README records about 1,581 passing SVG comparisons against zint 2.13.0. QR was swept across 40/40 versions, masks 0–7, and ECC L/M/Q/H. Those numbers are from August 2026. They get re-run against 2.16.0 before we repeat them in the README.
 
-Two gaps stay deferred unless a 2.16.0 diff on these five symbols forces them:
+The two consistency gaps on these five symbols are closed:
 
-- `gs1_lint` is absent. Unknown application identifiers and bad lengths make zint write no file and the port write a symbol. AIs (01), (10), (17), and (21) with valid data match byte for byte.
-- QR automatic ECI and the Shift-JIS fallback are absent. Latin-1 on the linear symbols matches. Non-Latin-1 QR makes zint emit a symbol and the port emit nothing. Kanji mode inside the encoder is ported. The library's Shift-JIS retry is not.
+- `gs1_lint` matches the built-in checker. An unknown AI is Error 260 and a bad length is Error 259, with no file. A bad check digit or date is Warning 261 and the SVG matches. AIs (01), (10), (17), and (21) with valid data stay byte for byte.
+- QR automatic ECI and the Shift-JIS fallback match. Latin-1 is unchanged. Shift JIS warns 760 with no ECI header. If that fails, the driver retries with an automatic ECI and warns 222.
 
 UPC-A add-ons, Code Set A, FNC4, and compliant height are implemented. The eval verifier never drew them. The harnesses did.
 
@@ -200,8 +200,6 @@ Not yet, by id:
 
 Also waiting, and not part of the first rock:
 
-- `gs1_lint`, so invalid GS1 is refused the way zint refuses it.
-- QR automatic ECI and the Shift-JIS fallback.
 - PDF text that uses OCR-B widths inside this library, if the report writer does not want to supply the font.
 - A single-page PDF file, if a human wants to open one without a report writer.
 - The next zint pin, when that round starts. Same rule: pin the latest release, rerun the comparator, fix what moved.
