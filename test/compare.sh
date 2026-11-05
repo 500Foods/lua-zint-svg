@@ -19,5 +19,10 @@ cd "$ROOT/test/harnesses"
 bash flags.sh
 bash colourdiff.sh
 bash upca.sh
+bash ean13.sh
+bash ean8.sh
+bash upce.sh
+bash c25inter.sh
+bash nve18.sh
 bash fuzz.sh "${FUZZ_ROUNDS:-5}"
 bash stressqr.sh "${STRESS_ROUNDS:-1}"

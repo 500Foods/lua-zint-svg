@@ -16,6 +16,7 @@ local pdf = require "zint.pdf"
 local code = require "zint.code"
 local code128 = require "zint.code128"
 local upcean = require "zint.upcean"
+local c25inter = require "zint.c25inter"
 local qr = require "zint.qr"
 local gs1 = require "zint.gs1"
 
@@ -117,9 +118,33 @@ s = symbol(34)
 ok, err = upcean.upca(s, "12345678901")
 if not ok then fail("upca", err) else check("upca", s) end
 
+s = symbol(15)
+ok, err = upcean.ean13(s, "123456789012")
+if not ok then fail("ean13", err) else check("ean13", s) end
+
+s = symbol(10)
+ok, err = upcean.ean8(s, "1234567")
+if not ok then fail("ean8", err) else check("ean8", s) end
+
+s = symbol(37)
+ok, err = upcean.upce(s, "123456")
+if not ok then fail("upce", err) else check("upce", s) end
+
+s = symbol(3)
+ok, err = c25inter.c25inter(s, "1234567890")
+if not ok then fail("c25inter", err) else check("c25inter", s) end
+
+s = symbol(89)
+ok, err = c25inter.itf14(s, "1234567890")
+if not ok then fail("itf14", err) else check("itf14", s) end
+
+s = symbol(75)
+ok, err = code128.nve18(s, "12345678901234567")
+if not ok then fail("nve18", err) else check("nve18", s) end
+
 s = symbol(58)
 ok, err = qr.qrcode(s, "HELLO")
 if not ok then fail("qr", err) else check("qr", s) end
 
 if failed > 0 then os.exit(1) end
-io.write("pdf  5 symbologies\n")
+io.write("pdf  11 symbologies\n")

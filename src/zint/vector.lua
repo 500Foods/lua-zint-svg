@@ -233,8 +233,8 @@ function M.plot(symbol, rotate_angle)
   -- out differently. For every other symbology the two are equal.
   --
   -- `upceanflag` is zero for those, and the digit count of the family member
-  -- otherwise -- 12 for UPC-A. Read it as a three-way switch: 0 for "not
-  -- UPC/EAN", 2 or 5 for a standalone add-on, >= 6 for a real symbol.
+  -- otherwise -- 12 for UPC-A, 13 for EAN-13. Read it as a three-way switch:
+  -- 0 for "not UPC/EAN", 2 or 5 for a standalone add-on, >= 6 for a real symbol.
   local main_width = symbol.width
   local upceanflag, addon, addon_len, addon_gap = 0, "", 0, 0
   if common.is_upcean(symbol.symbology) then
@@ -298,13 +298,11 @@ function M.plot(symbol, rotate_angle)
 
   -- --guardwhitespace prints "<" and ">" in the quiet zones so a printer can
   -- see they were not trimmed. The fudges nudge the two indicators outwards.
-  --
-  -- Ported in full below even though it can never fire: `zint-lua.sh` has no
-  -- --guardwhitespace, so nothing can set the flag. The alternative -- dropping
-  -- the branches -- would leave a hole to find again later, and the code is
-  -- three lines. The C's matching `gws_left_fudge` is absent: only EAN-8 draws
-  -- a "<", and EAN-8 is not in scope.
+  -- The CLI does not expose --guardwhitespace. The bit still has to be honoured
+  -- when a caller sets it, because EAN-8 and EAN-13 draw the indicators and the
+  -- oracle does too.
   local upcean_guard_whitespace = (opts & common.EANUPC_GUARD_WHITESPACE) ~= 0
+  local gws_left_fudge = f32(0.5)  -- EAN-8 "<", nudged toward the left edge
   local gws_right_fudge = f32(0.5)
 
   local small_text = (opts & common.SMALL_TEXT) ~= 0
@@ -481,12 +479,37 @@ function M.plot(symbol, rotate_angle)
   -- holds nothing but bars at this point -- which is what makes indexing by
   -- position safe.
   if guard_descent ~= 0 and upceanflag >= 6 then
-    local UPCA_GUARD_RECTS = {
-      [0] = true, [1] = true, [2] = true, [3] = true, [14] = true,
-      [15] = true, [26] = true, [27] = true, [28] = true, [29] = true,
-    }
+    -- Rectangle indices into the last row of bars, before text and borders.
+    -- UPC-A extends the number-system digit and the check digit as well as
+    -- the three guards. EAN-13's first digit is not a bar pattern, so only
+    -- the guards descend: left 0-1, centre 14-15, right 28-29.
+    local guard_rects
+    if upceanflag == 13 then
+      guard_rects = {
+        [0] = true, [1] = true, [14] = true, [15] = true,
+        [28] = true, [29] = true,
+      }
+    elseif upceanflag == 8 then
+      -- EAN-8: left guard, centre guard, right guard. Eight digits, so the
+      -- centre lands earlier than on a 95-module symbol.
+      guard_rects = {
+        [0] = true, [1] = true, [10] = true, [11] = true,
+        [20] = true, [21] = true,
+      }
+    elseif upceanflag == 6 then
+      -- UPC-E: left guard and the three-bar stop. There is no centre guard
+      -- and no separate check-digit bars.
+      guard_rects = {
+        [0] = true, [1] = true, [14] = true, [15] = true, [16] = true,
+      }
+    else
+      guard_rects = {
+        [0] = true, [1] = true, [2] = true, [3] = true, [14] = true,
+        [15] = true, [26] = true, [27] = true, [28] = true, [29] = true,
+      }
+    end
     for idx, rect in ipairs(vector.rectangles) do
-      if UPCA_GUARD_RECTS[(idx - 1) - last_row_start] then
+      if guard_rects[(idx - 1) - last_row_start] then
         rect.height = f32(rect.height + guard_descent)
       end
     end
@@ -509,14 +532,10 @@ function M.plot(symbol, rotate_angle)
     end
 
     if upceanflag >= 6 then
-      -- UPC/EAN. Not one centred string but four separately placed ones, at two
-      -- different sizes, because the digits have to line up with the bars they
-      -- belong to and the two outside digits sit outside the symbol entirely.
-      --
-      -- The x positions below are raw module counts into the 95-module symbol,
-      -- unscaled -- vector_scale multiplies everything at the end. They are the
-      -- centres of the groups they label: 28 is the middle of modules 3-45 (the
-      -- left half's six digits) and 67 the middle of 50-92.
+      -- UPC/EAN. Not one centred string. The digits have to line up with the
+      -- bars they belong to, and an outside digit sits in the quiet zone.
+      -- Each family member has its own slots, below. The numbers are raw
+      -- module counts, unscaled -- vector_scale multiplies them at the end.
       --
       -- Note this baseline subtracts the antialias fudge where the generic
       -- branch below subtracts the font's descent. The two are not the same
@@ -528,6 +547,101 @@ function M.plot(symbol, rotate_angle)
       text_yposn = drop_for_border(text_yposn)
 
       local t = symbol.text
+
+      if upceanflag == 13 then
+        -- EAN-13. The first digit is full size and right-aligned in the left
+        -- quiet zone. The nudge is 0.1, not UPC-A's 0.35, and the face is the
+        -- normal OCR-B size rather than the smaller outside face. Six digits
+        -- sit under each half: centres at 24.5 and 70.5, each group 6 * 8.5
+        -- modules wide. The add-on centres match UPC-A (105 / 119) because
+        -- the body is the same 95 modules. A guard-whitespace ">" is drawn
+        -- even with no add-on; UPC-A leaves that slot to the check digit.
+        local group_width = f32(f32(6.0) * f32(8.5))
+        add_string(vector, t:sub(1, 1),
+                   f32(-f32(f32(5.0) - f32(0.1)) + xoffset_comp), text_yposn,
+                   font_height, f32(8.5), 2)
+        add_string(vector, t:sub(2, 7),
+                   f32(f32(f32(24.0) + f32(0.5)) + xoffset_comp), text_yposn,
+                   font_height, group_width, 0)
+        add_string(vector, t:sub(8, 13),
+                   f32(f32(f32(71.0) - f32(0.5)) + xoffset_comp), text_yposn,
+                   font_height, group_width, 0)
+        if addon_len ~= 0 then
+          add_string(vector, addon,
+                     f32(f32((addon_len == 2 and 105.0 or 119.0) + xoffset_comp)
+                         + addon_gap),
+                     addon_text_yposn, font_height, f32(addon_len * 8.5), 0)
+          if upcean_guard_whitespace then
+            add_string(vector, ">",
+                       f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                       addon_text_yposn, font_height, f32(8.5), 2)
+          end
+        elseif upcean_guard_whitespace then
+          add_string(vector, ">",
+                     f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                     text_yposn, font_height, f32(8.5), 2)
+        end
+      elseif upceanflag == 8 then
+        -- EAN-8. Four digits under each half, centres 17.5 and 49.5, each
+        -- group 4 * 8.5 modules. No outside digit. A guard-whitespace "<"
+        -- sits in the left quiet zone and a ">" in the right, or above the
+        -- add-on when there is one. Add-on centres are 77 and 91.
+        local group_width = f32(f32(4.0) * f32(8.5))
+        if upcean_guard_whitespace then
+          add_string(vector, "<",
+                     f32(f32(-f32(7.0) - gws_left_fudge) + xoffset_comp),
+                     text_yposn, font_height, f32(8.5), 1)
+        end
+        add_string(vector, t:sub(1, 4),
+                   f32(f32(f32(17.0) + f32(0.5)) + xoffset_comp), text_yposn,
+                   font_height, group_width, 0)
+        add_string(vector, t:sub(5, 8),
+                   f32(f32(f32(50.0) - f32(0.5)) + xoffset_comp), text_yposn,
+                   font_height, group_width, 0)
+        if addon_len ~= 0 then
+          add_string(vector, addon,
+                     f32(f32((addon_len == 2 and 77.0 or 91.0) + xoffset_comp)
+                         + addon_gap),
+                     addon_text_yposn, font_height, f32(addon_len * 8.5), 0)
+          if upcean_guard_whitespace then
+            add_string(vector, ">",
+                       f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                       addon_text_yposn, font_height, f32(8.5), 2)
+          end
+        elseif upcean_guard_whitespace then
+          add_string(vector, ">",
+                     f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                     text_yposn, font_height, f32(8.5), 2)
+        end
+      elseif upceanflag == 6 then
+        -- UPC-E. Number system in the left quiet zone, six digits centred at
+        -- 24.5 across 6 * 8.5 modules, check digit just past the 51-module
+        -- stop. The check sits at 2X rather than the spec's 3X so it does not
+        -- meet a descended add-on. Add-on centres are 61 and 75. No ">"
+        -- without an add-on: the check digit already occupies that side.
+        local outside_width = f32(6.2)
+        local group_width = f32(f32(6.0) * f32(8.5))
+        add_string(vector, t:sub(1, 1),
+                   f32(-f32(f32(5.0) - f32(0.35)) + xoffset_comp), text_yposn,
+                   upcae_outside_font_height, outside_width, 2)
+        add_string(vector, t:sub(2, 7),
+                   f32(f32(f32(24.0) + f32(0.5)) + xoffset_comp), text_yposn,
+                   font_height, group_width, 0)
+        add_string(vector, t:sub(8, 8),
+                   f32(f32(f32(f32(51.0) - f32(0.35)) + f32(2.0)) + xoffset_comp),
+                   text_yposn, upcae_outside_font_height, outside_width, 1)
+        if addon_len ~= 0 then
+          add_string(vector, addon,
+                     f32(f32((addon_len == 2 and 61.0 or 75.0) + xoffset_comp)
+                         + addon_gap),
+                     addon_text_yposn, font_height, f32(addon_len * 8.5), 0)
+          if upcean_guard_whitespace then
+            add_string(vector, ">",
+                       f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                       addon_text_yposn, font_height, f32(8.5), 2)
+          end
+        end
+      else
       local outside_width = f32(6.2)     -- four modules, near enough
       local group_width = f32(5.0 * 8.5) -- five digits at 8.5 modules each
 
@@ -566,6 +680,7 @@ function M.plot(symbol, rotate_angle)
       -- The C has no `else if (upcean_guard_whitespace)` here for UPC-A or
       -- UPC-E, unlike EAN-8 and EAN-13: with no add-on there is no ">" on a
       -- UPC symbol, because the check digit is already occupying that space.
+      end
 
     else
       -- Everything else: one centred string under the symbol. Worked out as the

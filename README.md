@@ -31,11 +31,26 @@ local form = zint.barcode({
 | Code 39 | 8 | yes | vectors |
 | GS1-128 | 16 | yes | vectors |
 | Code 128 | 20 | yes | vectors |
+| EAN-8 | 10 | yes | vectors |
+| EAN-13 | 15 | yes | vectors |
 | UPC-A | 34 | yes | vectors |
 | UPC-A, check digit supplied | 35 | yes | vectors |
+| UPC-E | 37 | yes | vectors |
+| UPC-E, check digit supplied | 38 | yes | vectors |
+| Interleaved 2 of 5 | 3 | yes | vectors |
+| ITF-14 | 89 | yes | vectors |
+| NVE-18 (SSCC) | 75 | yes | vectors |
 | QR Code | 58 | yes | vectors |
 
-This release draws those six. Not yet: Code 11, the 2 of 5 family, Extended Code 39, EAN-8, EAN-13, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, UPC-E, MSI Plessey, Plessey, ITF-14, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar (all variants), Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbols, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols.
+EAN-13 takes 12 digits and appends the check digit, or 13 digits and checks the one you supplied. EAN-8 does the same with 7 or 8 digits. UPC-E takes 6 digits, or 7 with a number system of 0 or 1, and id 38 requires the check digit. Short digit strings are padded with leading zeroes. An EAN-8 add-on is drawn and warned as non-standard.
+
+Interleaved 2 of 5 takes digits. An odd count grows a leading zero. `--vers 1` appends a GS1 check digit and shows it; `--vers 2` appends it and leaves it off the human-readable line. ITF-14 takes up to 14 digits, pads to 13, and appends or checks the GS1 check digit. A `(01)`, `[01]`, or leading `01` of the right length is stripped. It draws a bearer box of 5 modules unless a box or bind is already set. ITF-14 always has a 10-module quiet zone. Interleaved 2 of 5 adds that zone only with `--quietzones`.
+
+NVE-18 is the 18-digit SSCC, drawn as GS1-128. It takes up to 18 digits, pads to 17, and appends or checks the GS1 check digit. A `(00)`, `[00]`, or leading `00` of the right length is stripped. The name on the command line is `nve18`. Its quiet zone is added with `--quietzones`.
+
+UPC and EAN human-readable digits are placed at OCR-B advances. The report writer embeds OCR-B and uses those positions. The PDF form names Helvetica as a placeholder font, so the bars match the SVG while the digit slots follow OCR-B. SVG draws those digits in the bundled OCR-B face and every other symbol in Arimo. `--embedfont` inlines the SVG face.
+
+This release draws those thirteen. Not yet: Code 11, Code 2 of 5 Standard, IATA, Data Logic, and Industrial, Extended Code 39, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, MSI Plessey, Plessey, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar (all variants), Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbols, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols.
 
 ## Behaviour
 
@@ -45,7 +60,7 @@ QR text that fits Latin-1 is encoded as Latin-1. Shift JIS warns 760 and is draw
 
 An unknown `filetype` is an error: `Error 142: File type '...' not supported`.
 
-UPC-A human-readable digits in the PDF stream are Helvetica, named and not embedded. The bars are the same geometry as the SVG. The digit widths are not OCR-B. The report writer can supply a font if the widths matter.
+The PDF form names Helvetica and leaves the face to the report writer. UPC and EAN digit positions are the OCR-B ones described beside the symbology table.
 
 ## Fonts
 
@@ -67,6 +82,8 @@ lua test/pdf.lua
 ```bash
 luarocks --lua-version=5.5 install lua-zint-svg
 ```
+
+https://luarocks.org/modules/500foods/lua-zint-svg
 
 From a clone of this repository:
 

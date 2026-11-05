@@ -1,4 +1,4 @@
--- src/zint/code128.lua -- Code 128 and GS1-128.
+-- src/zint/code128.lua -- Code 128, GS1-128, and NVE-18.
 --
 -- The symbol characters are chosen by the divide-and-conquer encoder in
 -- zint 2.16 backend/code128.c (Alex Geller's minimal encoding, with the
@@ -7,6 +7,7 @@
 -- is latched. The encoder never starts in C1.
 
 local common = require "zint.common"
+local gs1 = require "zint.gs1"
 
 local M = {}
 local ctoi = common.ctoi
@@ -465,6 +466,69 @@ function M.gs1_128(symbol, source, reduced)
   local text = source:sub(1, 200):gsub("%[", "("):gsub("%]", ")")
   symbol.text = #text == 200 and text:sub(1, 199) or text
   return true
+end
+
+-- backend/gs1.c `gs1_check_digit()`.
+local function gs1_check_digit(source, length)
+  local count = 0
+  local factor = (length & 1) ~= 0 and 3 or 1
+  for i = 1, length do
+    count = count + factor * (source:byte(i) - 48)
+    factor = factor ~ 2
+  end
+  return string.char(48 + (10 - (count % 10)) % 10)
+end
+
+-- backend/code128_based.c `nve18_or_ean14()`, data_len 17.
+-- Builds a GS1-128 "(00)" / "[00]" string and encodes that. The delimiter
+-- follows --gs1parens; the human-readable line is always parentheses, which
+-- gs1_128() does by rewriting brackets. EAN-14 is the same helper with
+-- data_len 13 and is not registered.
+function M.nve18(symbol, source)
+  local data_len = 17
+  local length = #source
+  if (length == data_len + 4 or length == data_len + 5)
+      and (source:sub(1, 4) == "(00)" or source:sub(1, 4) == "[00]") then
+    source = source:sub(5)
+    length = length - 4
+  elseif (length == data_len + 2 or length == data_len + 3)
+      and source:sub(1, 2) == "00" then
+    source = source:sub(3)
+    length = length - 2
+  end
+  if length > data_len + 1 then
+    return nil, string.format(
+      "Error 345: Input length %d too long (maximum %d)", length, data_len + 1)
+  end
+  for i = 1, length do
+    local c = source:byte(i)
+    if not c or c < 48 or c > 57 then
+      return nil, string.format(
+        "Error 346: Invalid character at position %d in input (digits only)", i)
+    end
+  end
+
+  local supplied
+  if length == data_len + 1 then
+    supplied = source:sub(length, length)
+    source = source:sub(1, length - 1)
+    length = length - 1
+  end
+  local digits = string.rep("0", data_len - length) .. source
+  local check = gs1_check_digit(digits, data_len)
+  if supplied and supplied ~= check then
+    return nil, string.format(
+      "Error 347: Invalid check digit '%s', expecting '%s'", supplied, check)
+  end
+
+  local open_b, close_b = "[", "]"
+  if (symbol.input_mode & common.GS1PARENS_MODE) ~= 0 then
+    open_b, close_b = "(", ")"
+  end
+  local equiv = open_b .. "00" .. close_b .. digits .. check
+  local reduced, err = gs1.verify(symbol, equiv)
+  if not reduced then return nil, err end
+  return M.gs1_128(symbol, equiv, reduced)
 end
 
 return M

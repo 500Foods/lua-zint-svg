@@ -1,6 +1,6 @@
 #!/usr/bin/env lua
 -- Byte comparison against committed SVG fixtures. Needs Lua only.
--- The fixtures are the bytes of vendored zint 2.16.0 for these five inputs.
+-- The fixtures are the bytes of vendored zint 2.16.0 for these inputs.
 
 os.setlocale("C", "numeric")
 
@@ -24,6 +24,12 @@ local cases = {
   { file = "code128.svg",  barcode = 20, data = "Ab-129" },
   { file = "gs1-128.svg",  barcode = 16, data = "[01]40063813339314[10]ABC12" },
   { file = "upca.svg",     barcode = 34, data = "12345678901" },
+  { file = "ean13.svg",    barcode = 15, data = "123456789012" },
+  { file = "ean8.svg",     barcode = 10, data = "1234567" },
+  { file = "upce.svg",     barcode = 37, data = "123456" },
+  { file = "c25inter.svg", barcode = 3,  data = "1234567890" },
+  { file = "itf14.svg",    barcode = 89, data = "1234567890" },
+  { file = "nve18.svg",    barcode = 75, data = "12345678901234567" },
   { file = "qr.svg",       barcode = 58, data = "HELLO" },
 }
 

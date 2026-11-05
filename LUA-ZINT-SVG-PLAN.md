@@ -115,7 +115,7 @@ LICENSE
 NOTICE
 LUA-ZINT-SVG-PLAN.md
 README.md
-lua-zint-svg-0.1.0-1.rockspec
+lua-zint-svg-0.2.0-1.rockspec
 src/zint/init.lua              was lua-zint.lua; returns the module
 src/zint/*.lua                 svg.lua and pdf.lua format the same vector list
 bin/lua-zint                   bash-callable CLI, zint-style flags
@@ -136,7 +136,7 @@ Build the oracle with Qt and PNG off, into `vendor/zint/build/`. That directory 
 
 ## Rock and the report generator
 
-`lua-zint-svg-0.1.0-1.rockspec`, format 3.0, same shape as the doksuela rockspec. Package name `lua-zint-svg`, module name `zint`, homepage this GitHub repo, license `MIT`, dependency `lua >= 5.5`. `build.modules` lists each `src/zint/*.lua`. `bin/lua-zint` is installed as a script. No native dependency and no other rock dependency.
+`lua-zint-svg-0.2.0-1.rockspec`, format 3.0, same shape as the doksuela rockspec. Package name `lua-zint-svg`, module name `zint`, homepage this GitHub repo, license `MIT`, dependency `lua >= 5.5`. `build.modules` lists each `src/zint/*.lua`. `bin/lua-zint` is installed as a script. No native dependency and no other rock dependency.
 
 The report generator copies `src/zint` into its tree, or submodules this repo, and `require "zint"` resolves on `package.path`. `luarocks make` in this repo is how we check the rock. `luarocks upload` is how other people install it. Same files either way.
 
@@ -186,21 +186,21 @@ Tests come in two layers.
 
 ## Backlog
 
-Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in this rock: Code 39 (8), GS1-128 (16), Code 128 (20), UPC-A (34), UPC-A with check digit (35), QR Code (58).
+Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in this rock: Interleaved 2 of 5 (3), Code 39 (8), EAN-8 (10), EAN-13 (15), GS1-128 (16), Code 128 (20), UPC-A (34), UPC-A with check digit (35), UPC-E (37), UPC-E with check digit (38), QR Code (58), NVE-18 (75), ITF-14 (89).
 
 Not yet, by id:
 
-- Linear and retail: Code 11 (1), Code 2 of 5 Standard (2), Interleaved (3), IATA (4), Data Logic (6), Industrial (7), Extended Code 39 (9), EAN-8 (10), EAN-2 add-on (11), EAN-5 add-on (12), EANX (13), EANX check (14), EAN-13 (15), Codabar (18), DP Leitcode (21), DP Identcode (22), Code 93 (25), Flattermarken (28), Telepen (32), UPC-E (37), UPC-E check (38), MSI Plessey (47), LOGMARS (50), PZN (52), VIN (73), Code 128 suppress C (60), UK Plessey (86), Telepen Numeric (87), ITF-14 (89), Code 32 (129), Channel Code (140), BC412 (146), DX Film Edge (147).
+- Linear and retail: Code 11 (1), Code 2 of 5 Standard (2), IATA (4), Data Logic (6), Industrial (7), Extended Code 39 (9), EAN-2 add-on (11), EAN-5 add-on (12), EANX (13), EANX check (14), Codabar (18), DP Leitcode (21), DP Identcode (22), Code 93 (25), Flattermarken (28), Telepen (32), MSI Plessey (47), LOGMARS (50), PZN (52), VIN (73), Code 128 suppress C (60), UK Plessey (86), Telepen Numeric (87), Code 32 (129), Channel Code (140), BC412 (146), DX Film Edge (147).
 - GS1 DataBar: Omnidirectional (29), Limited (30), Expanded (31), Stacked (79), Stacked Omnidirectional (80), Expanded Stacked (81).
 - Matrix: Data Matrix (71), Aztec (92), MaxiCode (57), Micro QR (97), Han Xin (116), DotCode (115), Grid Matrix (142), Ultracode (144), rMQR (145), UPNQR (143), Aztec Rune (128), Code One (141).
 - Stacked: Code 16k (23), Code 49 (24), PDF417 (55), Compact PDF417 (56), MicroPDF417 (84), Codablock-F (74).
 - Postal: POSTNET (40), PLANET (82), Australia Post (63), Reply Paid (66), Routing (67), Redirection (68), RM4SCC (70), Japan Post (76), Korea Post (77), KIX (90), USPS Intelligent Mail (85), CEPNet (54), Royal Mail 2D Mailmark (119), Mailmark 4-state (121), UPU S10 (120), FIM (49).
-- Pharma and HIBC: Pharmacode One-Track (51), Two-Track (53), EAN-14 (72), NVE-18 (75), ISBN (69), HIBC Code 128 (98), Code 39 (99), Data Matrix (102), QR (104), PDF417 (106), MicroPDF417 (108), Codablock-F (110), Aztec (112), DAFT (93), DPD (96).
+- Pharma and HIBC: Pharmacode One-Track (51), Two-Track (53), EAN-14 (72), ISBN (69), HIBC Code 128 (98), Code 39 (99), Data Matrix (102), QR (104), PDF417 (106), MicroPDF417 (108), Codablock-F (110), Aztec (112), DAFT (93), DPD (96).
 - Composites: EANX (130), GS1-128 (131), DataBar Omnidirectional (132), Limited (133), Expanded (134), UPC-A (135), UPC-E (136), DataBar Stacked (137), Stacked Omnidirectional (138), Expanded Stacked (139), EAN-8 (148), EAN-13 (149).
 
 Also waiting, and not part of the first rock:
 
-- PDF text that uses OCR-B widths inside this library, if the report writer does not want to supply the font.
+- OCR-B embedding inside this library. Decided: the report writer embeds OCR-B and uses the positions this library already computes. Noted beside the symbologies in the README.
 - A single-page PDF file, if a human wants to open one without a report writer.
 - The next zint pin, when that round starts. Same rule: pin the latest release, rerun the comparator, fix what moved.
 

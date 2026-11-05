@@ -104,8 +104,13 @@ end
 -- encodes. The others fall through to the same "application defined" default
 -- the library uses for Code 128 and Code 39.
 local function default_xdim(symbology)
-  if symbology == 34 or symbology == 35 then return f32(0.33) end
-  if symbology == 58 then return f32(0.625) end -- QR is fixed-ratio
+  -- GS1 retail X is 0.33mm: EAN-13 and both UPC-A ids. QR is the fixed-ratio
+  -- default. Everything else is the GS1-128 application default.
+  if symbology == 10 or symbology == 15 or symbology == 34 or symbology == 35
+      or symbology == 37 or symbology == 38 then
+    return f32(0.33)
+  end
+  if symbology == 58 then return f32(0.625) end
   return f32(0.495)
 end
 
@@ -227,6 +232,28 @@ function M.apply(symbol, opts)
         .. "' out of range (0.5 to 2000), **IGNORED**")
     else
       symbol.height = v
+    end
+  end
+
+  -- frontend/main.c OPT_VERS. Digits only, at most 9, and 1..999. Zero and
+  -- anything past 999 are warned and ignored. Interleaved 2 of 5 reads 1 as
+  -- "append a GS1 check digit" and 2 as "append it and hide it". Other
+  -- symbologies keep the value on option_2 and use it only where the encoder
+  -- already did.
+  if not absent(opts.vers) then
+    local text = tostring(opts.vers)
+    -- Zero is a real value here (out of range, warned). A failed match must
+    -- not be written as `if not val`, because 0 is false in Lua.
+    if #text > 9 or not text:match("^%d+$") then
+      return nil, "Error 133: Invalid version value (digits only)"
+    end
+    local val = tonumber(text)
+    if val >= 1 and val <= 999 then
+      symbol.option_2 = val
+    else
+      warn(string.format(
+        "Warning 113: Version value '%d' out of range (1 to 999), **IGNORED**",
+        val))
     end
   end
 

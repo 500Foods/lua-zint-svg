@@ -41,6 +41,7 @@
 --   dotty         draw circles rather than squares
 --   dotsize       dot diameter in modules, >= 0.01
 --   rotate        0, 90, 180 or 270
+--   vers          Interleaved 2 of 5 check digit: 1 shows it, 2 hides it
 --   reverse       white on black
 --   init          reader initialisation (programming) symbol
 --   esc           process escape sequences in the data
@@ -58,8 +59,9 @@
 --   zint/vector.lua   backend/vector.c   bitmap -> rectangles and strings
 --   zint/svg.lua      backend/svg.c      rectangles and strings -> SVG text
 --   zint/code.lua     backend/code.c     Code 39
---   zint/code128.lua  backend/code128.c  Code 128, GS1-128
---   zint/upcean.lua   backend/upcean.c   UPC-A
+--   zint/code128.lua  backend/code128.c  Code 128, GS1-128, NVE-18
+--   zint/upcean.lua   backend/upcean.c   UPC-A, UPC-E, EAN-8, EAN-13
+--   zint/c25inter.lua backend/2of5inter.c  Interleaved 2 of 5, ITF-14
 --   zint/gs1.lua      backend/gs1.c      GS1 AI parsing and input reduction
 --   zint/eci.lua      backend/eci.c      UTF-8 to ISO 8859-1
 --   zint/options.lua  (this repo)        option parsing, from the manual and the CLI
@@ -79,6 +81,7 @@ local svg     = require "zint.svg"
 local code    = require "zint.code"
 local code128 = require "zint.code128"
 local upcean  = require "zint.upcean"
+local c25inter = require "zint.c25inter"
 local qr      = require "zint.qr"
 local gs1     = require "zint.gs1"
 
@@ -88,20 +91,43 @@ local gs1     = require "zint.gs1"
 -- number: lower case, drop a leading "barcode", drop everything that is not
 -- alphanumeric, then look the remainder up.
 
+local BARCODE_C25INTER  = 3
 local BARCODE_CODE39    = 8
+local BARCODE_EAN8      = 10
+local BARCODE_EAN13     = 15
 local BARCODE_GS1_128   = 16
 local BARCODE_CODE128   = 20
 local BARCODE_UPCA      = 34
 local BARCODE_UPCA_CHK  = 35
+local BARCODE_UPCE      = 37
+local BARCODE_UPCE_CHK  = 38
 local BARCODE_QRCODE    = 58
+local BARCODE_NVE18     = 75
+local BARCODE_ITF14     = 89
 
 local NAMES = {
+  -- Interleaved 2 of 5. The spellings are the ones frontend/main.c accepts
+  -- after it has stripped spaces and punctuation.
+  c25inter = BARCODE_C25INTER,
+  c25interleaved = BARCODE_C25INTER,
+  ["2of5inter"] = BARCODE_C25INTER,
+  ["2of5interleaved"] = BARCODE_C25INTER,
+  code2of5inter = BARCODE_C25INTER,
+  code2of5interleaved = BARCODE_C25INTER,
+  interleaved2of5 = BARCODE_C25INTER,
+  interleavedcode2of5 = BARCODE_C25INTER,
+  itf14    = BARCODE_ITF14,
+  nve18    = BARCODE_NVE18,
   code39   = BARCODE_CODE39,
+  ean8     = BARCODE_EAN8,
+  ean13    = BARCODE_EAN13,
   gs1128   = BARCODE_GS1_128,
   ean128   = BARCODE_GS1_128, -- synonym, as in main.c
   code128  = BARCODE_CODE128,
   upca     = BARCODE_UPCA,
   upcachk  = BARCODE_UPCA_CHK,
+  upce     = BARCODE_UPCE,
+  upcechk  = BARCODE_UPCE_CHK,
   qrcode   = BARCODE_QRCODE,
 }
 
@@ -117,8 +143,13 @@ end
 
 -- backend/library.c `barcode_symbology()`, restricted to what is implemented.
 local ENCODERS = {
+  [BARCODE_C25INTER] = c25inter.c25inter,
+  [BARCODE_ITF14]    = c25inter.itf14,
   [BARCODE_CODE39]  = code.code39,
   [BARCODE_CODE128] = code128.code128,
+  -- NVE-18 is an SSCC. It builds a GS1-128 "(00)" string itself, so the
+  -- driver must not reduce the caller's digits first.
+  [BARCODE_NVE18] = code128.nve18,
   [BARCODE_GS1_128] = function(symbol, source, opts)
     -- GS1-128 is one of the symbologies `check_force_gs1()` lists, which means
     -- GS1 mode is on whether or not --gs1 was given: passing the flag changes
@@ -135,6 +166,15 @@ local ENCODERS = {
   -- is also how the C does it -- the two share a case label in library.c.
   [BARCODE_UPCA]     = upcean.upca,
   [BARCODE_UPCA_CHK] = upcean.upca,
+  -- EAN-13 is one id for both shapes. Twelve digits grow a check digit;
+  -- thirteen must already include the right one. There is no EAN13_CHK.
+  [BARCODE_EAN13]    = upcean.ean13,
+  -- EAN-8, same shape as EAN-13: seven digits grow a check, eight must match.
+  [BARCODE_EAN8]     = upcean.ean8,
+  -- 37 computes the check from six digits (or seven, with a number system).
+  -- 38 requires it. An eight-digit 37 still checks the eighth character.
+  [BARCODE_UPCE]     = upcean.upce,
+  [BARCODE_UPCE_CHK] = upcean.upce,
   -- QR is the other side of the GS1-128 coin: it is gs1-compliant but NOT
   -- force-gs1, so `ZBarcode_Encode_Segs` reduces the input before the encoder
   -- runs and qr.c never calls gs1_verify() itself. See the reduction step in
@@ -148,6 +188,7 @@ local ENCODERS = {
 -- their own input, everything else has it reduced for them.
 local FORCE_GS1 = {
   [BARCODE_GS1_128] = true,
+  [BARCODE_NVE18] = true,
 }
 
 -- backend/common.c `is_dotty()`. Dotty mode is a matrix-symbology feature: the
@@ -164,6 +205,7 @@ local IS_DOTTY = {
 -- no-op, so Code 39, Code 128 and UPC-A all refuse it.
 local GS1_COMPLIANT = {
   [BARCODE_GS1_128] = true,
+  [BARCODE_NVE18] = true,
   [BARCODE_QRCODE]  = true,
 }
 

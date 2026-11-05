@@ -180,17 +180,61 @@ local function quiet_zones(symbol, hide_text)
   -- so the `comp_xoffset >= 8 ? 1 : 9 - comp_xoffset` forms collapse to 9, and
   -- `9 - (comp_xoffset != 0)` to 9.
   if common.is_upcean(symbol.symbology) then
-    -- GS1 General Specifications 21.0.1 Section 5.2.3.4. The right zone
-    -- narrows when an add-on is present, which is what the text length test
-    -- detects: a plain UPC-A has 12 characters of human-readable text.
-    if not no_qz then
-      left = 9.0
-      right = #symbol.text > 12 and 5.0 or 9.0
-    elseif not hide_text then
-      left = 9.0
-      if #symbol.text <= 12 then right = 9.0 end
+    -- GS1 General Specifications 21.0.1 Section 5.2.3.4. comp_xoffset is zero
+    -- without a composite, so the C's `11 - comp_xoffset` forms are 11 and 7.
+    if common.is_ean(symbol.symbology) then
+      local n = #symbol.text
+      if n == 13 then
+        if not no_qz then
+          left, right = 11.0, 7.0
+        elseif not hide_text then
+          left = 11.0
+        end
+      elseif n == 16 or n == 19 then
+        if not no_qz then
+          left, right = 11.0, 5.0
+        elseif not hide_text then
+          left = 11.0
+        end
+      elseif n == 2 or n == 5 then
+        if not no_qz then right = 5.0 end
+      elseif n == 8 then
+        if not no_qz then left, right = 7.0, 7.0 end
+      else
+        if not no_qz then left, right = 7.0, 5.0 end
+      end
+    elseif symbol.symbology == 37 or symbol.symbology == 38 then
+      -- UPC-E. Right zone is 7, or 5 once an add-on pushes the text past 8.
+      -- The outside digits still need the left 9, and the right 7, when
+      -- --noquietzones is combined with text and there is no add-on.
+      if not no_qz then
+        left = 9.0
+        right = #symbol.text > 8 and 5.0 or 7.0
+      elseif not hide_text then
+        left = 9.0
+        if #symbol.text <= 8 then right = 7.0 end
+      end
+    else
+      -- UPC-A. The right zone narrows when an add-on is present. A plain
+      -- UPC-A has 12 characters of human-readable text. --noquietzones puts
+      -- the same 9 modules back while the outside digits are drawn, and only
+      -- narrows the symbol when --notext is given as well.
+      if not no_qz then
+        left = 9.0
+        right = #symbol.text > 12 and 5.0 or 9.0
+      elseif not hide_text then
+        left = 9.0
+        if #symbol.text <= 12 then right = 9.0 end
+      end
     end
     return left, right, top, bottom -- C: done = 1
+  end
+
+  -- ITF-14. GS1 General Specifications 21.0.1 5.3.2.2. The quiet zone is part
+  -- of the symbol, same as UPC/EAN, so it is drawn unless --noquietzones.
+  if symbol.symbology == 89 then
+    if not no_qz then left, right = 10.0, 10.0 end
+    return left, right, top, bottom
   end
 
   -- Second switch: only with --quietzones, and --noquietzones vetoes it.
@@ -200,9 +244,12 @@ local function quiet_zones(symbol, hide_text)
 
   if symbol.symbology == 8 then       -- CODE39: ISO/IEC 16388:2007 4.4 (d)
     left, right = 10.0, 10.0
+  elseif symbol.symbology == 3 then   -- C25INTER: ISO/IEC 16390:2007 4.4, 10X
+    left, right = 10.0, 10.0
   elseif symbol.symbology == 16 then  -- GS1-128: GS1 Gen Specs 21.0.1 5.4.4.2
     left, right = 10.0, 10.0
-  elseif symbol.symbology == 20 then  -- CODE128: ISO/IEC 15417:2007 4.4.2
+  elseif symbol.symbology == 20 or symbol.symbology == 75 then
+    -- CODE128 and NVE-18: ISO/IEC 15417:2007 4.4.2
     left, right = 10.0, 10.0
   elseif symbol.symbology == 58 then  -- QRCODE: ISO/IEC 18004:2015 Section 9.1
     left, right, top, bottom = 4.0, 4.0, 4.0, 4.0
@@ -257,8 +304,8 @@ end
 --
 -- The "flag" is the digit count of the family member -- 12 for UPC-A, 13 for
 -- EAN-13, 6 for UPC-E and so on -- and vector.c branches on it numerically
--- (`>= 6` means "a real symbol rather than a standalone add-on"). Only 12 is
--- reachable here.
+-- (`>= 6` means "a real symbol rather than a standalone add-on"). 6, 8, 12,
+-- and 13 are reachable here.
 --
 -- Note the add-on is scraped back out of the human-readable text rather than
 -- passed down from the encoder, and the scan starts at offset 6 because no
@@ -295,9 +342,27 @@ function M.process_upcean(symbol)
     end
   end
 
-  -- UPC-A's main symbol is always 95 modules; anything past that is the gap and
-  -- the add-on. comp_xoffset is zero without a composite component.
-  return 12, 95, addon, addon_len, addon_gap
+  -- Main width is the body, not symbol.width: the add-on and its gap sit past
+  -- it. comp_xoffset is zero without a composite. EAN-13 and UPC-A are both
+  -- 95 modules; the flag is what tells the text layout which slots to use.
+  local flag, main_width
+  if common.is_ean(symbol.symbology) then
+    local n = #text
+    if n == 13 or n == 16 or n == 19 then
+      flag, main_width = 13, 95
+    elseif n == 2 then
+      flag, main_width = 2, symbol.width
+    elseif n == 5 then
+      flag, main_width = 5, symbol.width
+    else
+      flag, main_width = 8, 68
+    end
+  elseif symbol.symbology == 37 or symbol.symbology == 38 then
+    flag, main_width = 6, 51
+  else
+    flag, main_width = 12, 95
+  end
+  return flag, main_width, addon, addon_len, addon_gap
 end
 
 -- ---------------------------------------------------------------- row height

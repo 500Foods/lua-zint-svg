@@ -153,17 +153,29 @@ end
 
 -- ----------------------------------------------------------- symbology tests
 
--- backend/common.c `is_upcean()`. The C lists ten symbologies -- the EAN, UPC
--- and ISBN variants plus their composite forms; of those only UPC-A (34) and
--- UPC-A with a supplied check digit (35) are encoded here.
+-- backend/common.c `is_ean()`. The EAN side of the family, as opposed to UPC-A
+-- and UPC-E. Quiet zones and the human-readable flag key off this, because an
+-- EAN-13's text is 13 characters with no add-on and a UPC-A's is 12, so a
+-- shared "longer than 12" test would steal the right quiet zone.
+--
+-- Of the C's list, EAN-8 (10) and EAN-13 (15) are encoded. The standalone
+-- add-ons, ISBN, and the legacy EANX ids are not, yet.
+function M.is_ean(symbology)
+  return symbology == 10 or symbology == 15
+end
+
+-- backend/common.c `is_upcean()`. The C lists the EAN, UPC and ISBN variants
+-- plus their composite forms. Encoded here: EAN-8 (10), EAN-13 (15), UPC-A
+-- (34 and 35), and UPC-E (37 and 38).
 --
 -- Three separate files branch on this predicate and they must agree, because
 -- they are three halves of one layout: output.lua sizes the quiet zones for the
--- outside digits, vector.lua splits the text into four pieces and hangs the
--- guard bars below the rest, and svg.lua switches the font to OCRB. Any one of
--- them disagreeing produces a symbol that is subtly, consistently wrong.
+-- outside digits, vector.lua splits the text and hangs the guard bars below
+-- the rest, and svg.lua switches the font to OCRB. Any one of them disagreeing
+-- produces a symbol that is subtly, consistently wrong.
 function M.is_upcean(symbology)
-  return symbology == 34 or symbology == 35
+  return M.is_ean(symbology) or symbology == 34 or symbology == 35
+      or symbology == 37 or symbology == 38
 end
 
 -- ------------------------------------------------------- flags and constants
