@@ -5,8 +5,12 @@
 -- anchor is flipped across the vector height. The report writer supplies the
 -- object number, the stream dictionary, and the Do invocation.
 --
--- Rectangles are the bars. Text is the human-readable line, named as
--- Helvetica and not embedded. UPC-A digit widths will not match OCR-B.
+-- Rectangles are the bars. Text is one Tj per string. The content stream
+-- names Helvetica and does not embed a face, so a caller that ignores the
+-- font field behaves as before. When the symbol has text, the return also
+-- carries the raw TrueType bytes for that face: OCR-B for UPC and EAN,
+-- Arimo otherwise. The writer embeds them. This file does not assign object
+-- numbers, build a FontFile2, compress, or subset.
 -- Circles (dotty mode) are four cubic beziers.
 
 local common = require "zint.common"
@@ -88,7 +92,7 @@ function M.form(symbol)
     out[#out + 1] = "ET\n"
   end
 
-  return {
+  local form = {
     kind = "form-xobject",
     bbox = { 0, 0, vector.width, vector.height },
     content = table.concat(out),
@@ -96,6 +100,20 @@ function M.form(symbol)
       Font = { F1 = { BaseFont = "Helvetica", Subtype = "Type1" } },
     },
   }
+
+  -- Same lazy require as svg.lua. The faces are tens of kilobytes and a
+  -- symbol with no text has nothing to set them on.
+  if #vector.strings > 0 then
+    local fonts = require "zint.fonts_ttf"
+    local upcean = common.is_upcean(symbol.symbology)
+    form.font = {
+      family = upcean and "OCRB" or "Arimo",
+      format = "TTF",
+      bytes = upcean and fonts.upcean or fonts.normal,
+    }
+  end
+
+  return form
 end
 
 return M

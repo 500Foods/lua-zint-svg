@@ -31,6 +31,8 @@ local cases = {
   { file = "itf14.svg",    barcode = 89, data = "1234567890" },
   { file = "nve18.svg",    barcode = 75, data = "12345678901234567" },
   { file = "qr.svg",       barcode = 58, data = "HELLO" },
+  { file = "dbarexp.svg",  barcode = 31, data = "[01]09501101530003[17]140704[10]AB-123" },
+  { file = "dbarexpstk.svg", barcode = 81, data = "[01]09501101530003[17]140704[10]AB-123" },
 }
 
 local failed = 0

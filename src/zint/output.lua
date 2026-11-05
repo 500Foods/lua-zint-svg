@@ -237,6 +237,15 @@ local function quiet_zones(symbol, hide_text)
     return left, right, top, bottom
   end
 
+  -- GS1 DataBar. General Specifications 21.0.1 Section 5.5.1.1: no quiet
+  -- zone. This is the first switch, so --quietzones does not add one.
+  -- 29, 30, 79 and 80 are named now so the rule is in one place; only
+  -- Expanded (31) and Expanded Stacked (81) are encoded.
+  if symbol.symbology == 29 or symbol.symbology == 30 or symbol.symbology == 31
+      or symbol.symbology == 79 or symbol.symbology == 80 or symbol.symbology == 81 then
+    return left, right, top, bottom
+  end
+
   -- Second switch: only with --quietzones, and --noquietzones vetoes it.
   if (opts & common.BARCODE_QUIET_ZONES) == 0 or no_qz then
     return left, right, top, bottom

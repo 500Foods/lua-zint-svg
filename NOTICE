@@ -47,13 +47,17 @@ this repository.
 Fonts
 -----
 
-src/zint/fonts.lua embeds two fonts, used only when --embedfont is set.
+src/zint/fonts.lua embeds two WOFF2 fonts, used only when --embedfont is set.
+src/zint/fonts_ttf.lua holds the same two faces as raw TrueType bytes,
+returned with a PDF form when the symbol has text.
 
-Arimo (Latin-1 subset, WOFF2), Copyright 2013 Steve Matteson, Apache License
+Arimo (Latin-1 subset), Copyright 2013 Steve Matteson, Apache License
 2.0. See http://www.apache.org/licenses/LICENSE-2.0
+The WOFF2 is in fonts.lua. The TrueType is in fonts_ttf.lua.
 
 OCR-B digit subset, adapted from OCR-B font version 0.2 by Matthew Skala
 (2011), based on Metafont definitions by Norbert Schwarz (1986, 2011).
 Matthew Skala's digitization is released for unrestricted use and
 distribution. A previous non-commercial restriction on that digitization has
 been lifted. See https://tsukurimashou.osdn.jp/ocr.php.en
+The WOFF2 is in fonts.lua. The TrueType is in fonts_ttf.lua.

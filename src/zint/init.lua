@@ -41,7 +41,10 @@
 --   dotty         draw circles rather than squares
 --   dotsize       dot diameter in modules, >= 0.01
 --   rotate        0, 90, 180 or 270
---   vers          Interleaved 2 of 5 check digit: 1 shows it, 2 hides it
+--   vers          Interleaved 2 of 5 check digit: 1 shows it, 2 hides it.
+--                 DataBar Expanded Stacked reads it as columns per row.
+--   cols          DataBar Expanded Stacked columns per row, 1 to 11
+--   rows          DataBar Expanded Stacked maximum rows, 2 to 11
 --   reverse       white on black
 --   init          reader initialisation (programming) symbol
 --   esc           process escape sequences in the data
@@ -62,11 +65,13 @@
 --   zint/code128.lua  backend/code128.c  Code 128, GS1-128, NVE-18
 --   zint/upcean.lua   backend/upcean.c   UPC-A, UPC-E, EAN-8, EAN-13
 --   zint/c25inter.lua backend/2of5inter.c  Interleaved 2 of 5, ITF-14
+--   zint/dbar.lua     backend/rss.c      GS1 DataBar Expanded, Expanded Stacked
 --   zint/gs1.lua      backend/gs1.c      GS1 AI parsing and input reduction
 --   zint/eci.lua      backend/eci.c      UTF-8 to ISO 8859-1
 --   zint/options.lua  (this repo)        option parsing, from the manual and the CLI
 --   zint/pdf.lua      (this repo)        the same vector list, as PDF operators
---   zint/fonts.lua    backend/fonts/*.h  the --embedfont WOFF2 blobs
+--   zint/fonts.lua     backend/fonts/*_woff2.h  the --embedfont WOFF2 blobs
+--   zint/fonts_ttf.lua backend/fonts/*_ttf.h    TrueType bytes for the PDF form
 
 -- SVG decimals are part of the byte-identical claim. The C locale's decimal
 -- point is a period. Callers that need another numeric locale can restore it
@@ -82,6 +87,7 @@ local code    = require "zint.code"
 local code128 = require "zint.code128"
 local upcean  = require "zint.upcean"
 local c25inter = require "zint.c25inter"
+local dbar    = require "zint.dbar"
 local qr      = require "zint.qr"
 local gs1     = require "zint.gs1"
 
@@ -102,7 +108,9 @@ local BARCODE_UPCA_CHK  = 35
 local BARCODE_UPCE      = 37
 local BARCODE_UPCE_CHK  = 38
 local BARCODE_QRCODE    = 58
+local BARCODE_DBAR_EXP  = 31
 local BARCODE_NVE18     = 75
+local BARCODE_DBAR_EXPSTK = 81
 local BARCODE_ITF14     = 89
 
 local NAMES = {
@@ -118,6 +126,19 @@ local NAMES = {
   interleavedcode2of5 = BARCODE_C25INTER,
   itf14    = BARCODE_ITF14,
   nve18    = BARCODE_NVE18,
+  -- GS1 DataBar Expanded. frontend/main.c, composite synonyms left out.
+  databarexp = BARCODE_DBAR_EXP,
+  databarexpanded = BARCODE_DBAR_EXP,
+  dbarexp = BARCODE_DBAR_EXP,
+  dbarexpanded = BARCODE_DBAR_EXP,
+  rssexp = BARCODE_DBAR_EXP,
+  databarexpandedstacked = BARCODE_DBAR_EXPSTK,
+  databarexpandedstk = BARCODE_DBAR_EXPSTK,
+  databarexpstk = BARCODE_DBAR_EXPSTK,
+  dbarexpandedstacked = BARCODE_DBAR_EXPSTK,
+  dbarexpandedstk = BARCODE_DBAR_EXPSTK,
+  dbarexpstk = BARCODE_DBAR_EXPSTK,
+  rssexpstack = BARCODE_DBAR_EXPSTK,
   code39   = BARCODE_CODE39,
   ean8     = BARCODE_EAN8,
   ean13    = BARCODE_EAN13,
@@ -180,15 +201,19 @@ local ENCODERS = {
   -- runs and qr.c never calls gs1_verify() itself. See the reduction step in
   -- barcode() below.
   [BARCODE_QRCODE]   = qr.qrcode,
+  -- Expanded calls gs1_verify itself. Stacked has no human-readable text.
+  [BARCODE_DBAR_EXP] = dbar.expanded,
+  [BARCODE_DBAR_EXPSTK] = dbar.expanded,
 }
 
--- backend/library.c `check_force_gs1()`. The symbologies that are in GS1 mode
--- whether or not --gs1 was given. Of the five here only GS1-128 qualifies, and
--- the distinction matters for exactly one thing: force-gs1 symbologies reduce
--- their own input, everything else has it reduced for them.
+-- backend/library.c `check_force_gs1()`. These are in GS1 mode whether or not
+-- --gs1 was given, and they reduce their own input. Everything else that is
+-- gs1-compliant has the input reduced for it.
 local FORCE_GS1 = {
   [BARCODE_GS1_128] = true,
   [BARCODE_NVE18] = true,
+  [BARCODE_DBAR_EXP] = true,
+  [BARCODE_DBAR_EXPSTK] = true,
 }
 
 -- backend/common.c `is_dotty()`. Dotty mode is a matrix-symbology feature: the
@@ -206,6 +231,8 @@ local IS_DOTTY = {
 local GS1_COMPLIANT = {
   [BARCODE_GS1_128] = true,
   [BARCODE_NVE18] = true,
+  [BARCODE_DBAR_EXP] = true,
+  [BARCODE_DBAR_EXPSTK] = true,
   [BARCODE_QRCODE]  = true,
 }
 

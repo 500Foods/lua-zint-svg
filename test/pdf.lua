@@ -13,12 +13,16 @@ package.path = root .. "/src/?.lua;" .. root .. "/src/?/init.lua;" .. package.pa
 local common = require "zint.common"
 local vector = require "zint.vector"
 local pdf = require "zint.pdf"
+local svg = require "zint.svg"
+local woff = require "zint.fonts"
+local ttf = require "zint.fonts_ttf"
 local code = require "zint.code"
 local code128 = require "zint.code128"
 local upcean = require "zint.upcean"
 local c25inter = require "zint.c25inter"
 local qr = require "zint.qr"
 local gs1 = require "zint.gs1"
+local dbar = require "zint.dbar"
 
 local f32 = common.stripf
 local failed = 0
@@ -83,9 +87,33 @@ local function check(name, symbol)
       return fail(name, "missing text " .. str.text)
     end
   end
-  local linear = symbol.symbology ~= 58
-  if linear and #vec.strings == 0 then
-    return fail(name, "linear symbol has no human-readable text")
+  if #vec.strings == 0 then
+    if form.font ~= nil then
+      return fail(name, "font field set with no text")
+    end
+  else
+    local upcean = common.is_upcean(symbol.symbology)
+    local face = form.font
+    local family = upcean and "OCRB" or "Arimo"
+    local bytes = upcean and ttf.upcean or ttf.normal
+    local length = upcean and 2404 or 27448
+    if not face then
+      return fail(name, "missing font")
+    end
+    if face.family ~= family or face.format ~= "TTF" then
+      return fail(name, "font " .. tostring(face.family) .. " " .. tostring(face.format))
+    end
+    if face.bytes ~= bytes or #face.bytes ~= length then
+      return fail(name, "font bytes " .. tostring(face.bytes and #face.bytes))
+    end
+    if face.bytes:sub(1, 4) ~= "\0\1\0\0" then
+      return fail(name, "font scaler")
+    end
+  end
+  -- QR has no text line. Expanded Stacked (81) does not either.
+  local no_hrt = symbol.symbology == 58 or symbol.symbology == 81
+  if not no_hrt and #vec.strings == 0 then
+    return fail(name, "symbol has no human-readable text")
   end
   io.write("ok  ", name, "  rects=", #got, "  strings=", #vec.strings, "\n")
 end
@@ -146,5 +174,61 @@ s = symbol(58)
 ok, err = qr.qrcode(s, "HELLO")
 if not ok then fail("qr", err) else check("qr", s) end
 
+s = symbol(31)
+ok, err = dbar.expanded(s, "[01]09501101530003[17]140704[10]AB-123")
+if not ok then fail("dbarexp", err) else check("dbarexp", s) end
+
+s = symbol(81)
+ok, err = dbar.expanded(s, "[01]09501101530003[17]140704[10]AB-123")
+if not ok then fail("dbarexpstk", err) else check("dbarexpstk", s) end
+
+-- --notext clears show_hrt, so the form has bars and no font field.
+s = symbol(20)
+s.show_hrt = 0
+ok, err = code128.code128(s, "Ab-129")
+if not ok then
+  fail("code128-notext", err)
+else
+  if s.height < 0.5 then common.set_height(s, 0.0, 50.0, 0.0) end
+  vector.plot(s, 0)
+  local form = pdf.form(s)
+  if #s.vector.strings ~= 0 then
+    fail("code128-notext", "notext still drew text")
+  elseif form.font ~= nil then
+    fail("code128-notext", "font field set with no text")
+  elseif form.resources.Font.F1.BaseFont ~= "Helvetica" then
+    fail("code128-notext", "font resource is not Helvetica")
+  else
+    io.write("ok  code128-notext  no font\n")
+  end
+end
+
+-- --embedfont still pastes the WOFF2 blob. The TrueType module is not on this path.
+local function check_embed(name, symbol, family, blob)
+  if symbol.height < 0.5 then common.set_height(symbol, 0.0, 50.0, 0.0) end
+  vector.plot(symbol, 0)
+  local doc = svg.plot(symbol)
+  if not doc:find('font-family:"' .. family .. '"', 1, true) then
+    return fail(name, "missing " .. family)
+  end
+  if not doc:find(blob, 1, true) then
+    return fail(name, "WOFF2 blob changed")
+  end
+  if doc:find("font/ttf", 1, true) then
+    return fail(name, "SVG carries a TTF")
+  end
+  io.write("ok  ", name, "  embedfont ", family, "\n")
+end
+
+s = symbol(20)
+s.output_options = common.EMBED_VECTOR_FONT
+ok, err = code128.code128(s, "Ab-129")
+if not ok then fail("embedfont-c128", err) else check_embed("embedfont-c128", s, "Arimo", woff.normal) end
+
+s = symbol(34)
+s.output_options = common.EMBED_VECTOR_FONT
+ok, err = upcean.upca(s, "12345678901")
+if not ok then fail("embedfont-upca", err) else check_embed("embedfont-upca", s, "OCRB", woff.upcean) end
+
 if failed > 0 then os.exit(1) end
-io.write("pdf  11 symbologies\n")
+io.write("pdf  13 symbologies\n")

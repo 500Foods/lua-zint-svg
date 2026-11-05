@@ -104,10 +104,11 @@ end
 -- encodes. The others fall through to the same "application defined" default
 -- the library uses for Code 128 and Code 39.
 local function default_xdim(symbology)
-  -- GS1 retail X is 0.33mm: EAN-13 and both UPC-A ids. QR is the fixed-ratio
-  -- default. Everything else is the GS1-128 application default.
-  if symbology == 10 or symbology == 15 or symbology == 34 or symbology == 35
-      or symbology == 37 or symbology == 38 then
+  -- GS1 retail X is 0.33mm: EAN, UPC, and DataBar Expanded. QR is the
+  -- fixed-ratio default. Everything else is the GS1-128 application default.
+  if symbology == 10 or symbology == 15 or symbology == 31 or symbology == 34
+      or symbology == 35 or symbology == 37 or symbology == 38
+      or symbology == 81 then
     return f32(0.33)
   end
   if symbology == 58 then return f32(0.625) end
@@ -253,6 +254,41 @@ function M.apply(symbol, opts)
     else
       warn(string.format(
         "Warning 113: Version value '%d' out of range (1 to 999), **IGNORED**",
+        val))
+    end
+  end
+
+  -- frontend/main.c OPT_COLS. Any symbology stores it on option_2. DataBar
+  -- Expanded Stacked reads 1..11 as columns per row. Applied after --vers,
+  -- so when both are set the column count wins.
+  if not absent(opts.cols) then
+    local text = tostring(opts.cols)
+    if not text:match("^%d+$") then
+      return nil, "Error 131: Invalid columns value (digits only)"
+    end
+    local val = tonumber(text)
+    if val >= 1 and val <= 200 then
+      symbol.option_2 = val
+    else
+      warn(string.format(
+        "Warning 111: Number of columns '%d' out of range (1 to 200), **IGNORED**",
+        val))
+    end
+  end
+
+  -- frontend/main.c OPT_ROWS. Out of range warns for every symbology. In
+  -- range, only Expanded Stacked stores it, and it stores it on option_3.
+  if not absent(opts.rows) then
+    local text = tostring(opts.rows)
+    if not text:match("^%d+$") then
+      return nil, "Error 132: Invalid rows value (digits only)"
+    end
+    local val = tonumber(text)
+    if val >= 1 and val <= 90 then
+      if symbol.symbology == 81 then symbol.option_3 = val end
+    else
+      warn(string.format(
+        "Warning 112: Number of rows '%d' out of range (1 to 90), **IGNORED**",
         val))
     end
   end

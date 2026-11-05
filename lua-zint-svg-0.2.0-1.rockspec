@@ -44,6 +44,8 @@ This release draws these, by name or by id:
     ITF-14                        89
     NVE-18 (SSCC)                 75
     QR Code                       58
+    GS1 DataBar Expanded          31
+    GS1 DataBar Expanded Stacked  81
 
 EAN-13 takes 12 digits and appends the check digit, or 13 digits
 and checks the one you supplied. EAN-8 does the same with 7 or 8.
@@ -62,6 +64,13 @@ Interleaved 2 of 5 adds that zone only with quietzones.
 NVE-18 is the 18-digit SSCC, drawn as GS1-128. It takes up to 18
 digits, pads to 17, and appends or checks the GS1 check digit. The
 command-line name is nve18. Its quiet zone is added with quietzones.
+
+GS1 DataBar Expanded takes a GS1 element string. Expanded Stacked
+is the same symbol broken into rows. cols sets the columns per row
+(1 to 11, default 2). rows sets the maximum rows (2 to 11) when
+cols is omitted. Stacked symbols have no human-readable line.
+Neither variant has a quiet zone. The short names are dbarexp and
+dbarexpstk.
 
 UPC and EAN human-readable digits are placed at OCR-B advances.
 The report writer embeds OCR-B and uses those positions. The PDF
@@ -107,9 +116,11 @@ build = {
     ["zint.code"] = "src/zint/code.lua",
     ["zint.code128"] = "src/zint/code128.lua",
     ["zint.common"] = "src/zint/common.lua",
+    ["zint.dbar"] = "src/zint/dbar.lua",
     ["zint.eci"] = "src/zint/eci.lua",
     ["zint.eci_sb"] = "src/zint/eci_sb.lua",
     ["zint.fonts"] = "src/zint/fonts.lua",
+    ["zint.fonts_ttf"] = "src/zint/fonts_ttf.lua",
     ["zint.gs1"] = "src/zint/gs1.lua",
     ["zint.gs1_lint"] = "src/zint/gs1_lint.lua",
     ["zint.options"] = "src/zint/options.lua",

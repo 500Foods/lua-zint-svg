@@ -168,10 +168,10 @@ end
 -- plus their composite forms. Encoded here: EAN-8 (10), EAN-13 (15), UPC-A
 -- (34 and 35), and UPC-E (37 and 38).
 --
--- Three separate files branch on this predicate and they must agree, because
--- they are three halves of one layout: output.lua sizes the quiet zones for the
--- outside digits, vector.lua splits the text and hangs the guard bars below
--- the rest, and svg.lua switches the font to OCRB. Any one of them disagreeing
+-- Four files branch on this predicate and they must agree: output.lua sizes
+-- the quiet zones for the outside digits, vector.lua splits the text and hangs
+-- the guard bars below the rest, svg.lua switches the SVG face to OCR-B, and
+-- pdf.lua returns that face's TrueType bytes. Any one of them disagreeing
 -- produces a symbol that is subtly, consistently wrong.
 function M.is_upcean(symbology)
   return M.is_ean(symbology) or symbology == 34 or symbology == 35
