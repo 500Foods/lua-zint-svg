@@ -1,6 +1,6 @@
 # lua-zint-svg
 
-Pure Lua barcodes for a Lua report generator. No libzint, no image library, and no network at runtime. The module returns an SVG document, or a PDF Form XObject content stream the report writer can place on a page.
+Pure Lua barcodes. No C library, no image library, and no network at runtime. The module returns an SVG document, or a PDF Form XObject content stream the report writer can place on a page.
 
 ```lua
 local zint = require "zint"
@@ -20,34 +20,28 @@ local form = zint.barcode({
 -- The writer supplies the object number, /Length, the Form dictionary, and Do.
 ```
 
-`bin/lua-zint` is the same library from the shell. Values are strings, so float parsing happens inside the port.
+`lua-zint` is the same library from the shell. Values are strings, so float parsing happens inside the library.
 
-This is an independent port of [zint](https://github.com/zint/zint) 2.16.0 (19 December 2025, commit `55541e1`), by Robin Stuart and the zint authors. Upstream lives at [zint.org.uk](https://zint.org.uk). It is not affiliated with, endorsed by, or sponsored by the zint project. See [NOTICE](NOTICE).
-
-The encoders shipped here follow the BSD-3-Clause library. The SVG for the five symbologies below matches the vendored 2.16.0 `zint` CLI byte for byte, Qt/PNG/GS1 Syntax Engine off. The PDF stream is this library's own drawing of that same vector list. It is not a zint PDF, and it is not byte-compared to zint.
-
-`--scalexdimdp` with an `in` or `dpi` suffix follows the 2.16.0 CLI, which divides by 25.4.
+`--scalexdimdp` with an `in` or `dpi` suffix divides by 25.4.
 
 ## Symbologies
 
 | symbology | id | SVG | PDF form |
 |---|---:|---|---|
-| Code 39 | 8 | matches 2.16.0 | vectors |
-| GS1-128 | 16 | matches 2.16.0 | vectors |
-| Code 128 | 20 | matches 2.16.0 | vectors |
-| UPC-A | 34 | matches 2.16.0 | vectors |
-| UPC-A, check digit supplied | 35 | matches 2.16.0 | vectors |
-| QR Code | 58 | matches 2.16.0 | vectors |
+| Code 39 | 8 | yes | vectors |
+| GS1-128 | 16 | yes | vectors |
+| Code 128 | 20 | yes | vectors |
+| UPC-A | 34 | yes | vectors |
+| UPC-A, check digit supplied | 35 | yes | vectors |
+| QR Code | 58 | yes | vectors |
 
-`test/compare.sh` is that claim. Against this pin it ran `flags.sh` (171 matched, 20 refused by both), `colourdiff.sh` (42/42), `upca.sh` (253), `fuzz.sh` (165 over 5 rounds), and `stressqr.sh` (279 matched, 5 skipped because zint wrote no file, versions 40/40, masks 0–7, ECC L/M/Q/H). `test/smoke.lua` repeats five of those SVGs with Lua alone.
+This release draws those six. Not yet: Code 11, the 2 of 5 family, Extended Code 39, EAN-8, EAN-13, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, UPC-E, MSI Plessey, Plessey, ITF-14, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar (all variants), Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbols, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols.
 
-Not yet, from the same `zint.h`: Code 11, the 2 of 5 family, Extended Code 39, EAN-8, EAN-13, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, UPC-E, MSI Plessey, Plessey, ITF-14, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar (all variants), Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbologies, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols. The full id list is in [LUA-ZINT-SVG-PLAN.md](LUA-ZINT-SVG-PLAN.md).
+## Behaviour
 
-## Consistency
+An unknown Application Identifier is Error 260 and a bad length is Error 259, and neither writes a file. A bad check digit or a bad date is Warning 261, and the symbol is still drawn. Valid AIs, including `(01)`, `(10)`, `(17)`, and `(21)`, encode as usual.
 
-GS1 checks match zint 2.16.0 built without the GS1 Syntax Engine. An unknown Application Identifier is Error 260 and a bad length is Error 259, and neither writes a file. A bad check digit or a bad date is Warning 261, and the SVG is the one zint writes. Valid AIs, including `(01)`, `(10)`, `(17)`, and `(21)`, stay byte-identical.
-
-QR Latin-1 stays byte-identical. Shift JIS warns 760 and is drawn with no ECI header. Input that fits neither Latin-1 nor Shift JIS is drawn again under an automatic ECI and warns 222.
+QR text that fits Latin-1 is encoded as Latin-1. Shift JIS warns 760 and is drawn with no ECI header. Input that fits neither Latin-1 nor Shift JIS is drawn again under an automatic ECI and warns 222.
 
 An unknown `filetype` is an error: `Error 142: File type '...' not supported`.
 
@@ -59,19 +53,22 @@ SVG text uses Arimo (Steve Matteson, 2013, Apache-2.0) or OCR-B (Matthew Skala, 
 
 ## Speed
 
-A version-40 QR took a few seconds in the August port. That is fine for a report page. Measure it before putting it in a tight loop.
+A version-40 QR takes a few seconds. That is fine for a report page. Measure it before putting it in a tight loop.
 
-## Build the comparator
-
-The vendored tree is the reading copy and the oracle. Its build directory is gitignored.
+## Tests
 
 ```bash
-test/compare.sh
 lua test/smoke.lua
 lua test/pdf.lua
 ```
 
 ## Install
+
+```bash
+luarocks --lua-version=5.5 install lua-zint-svg
+```
+
+From a clone of this repository:
 
 ```bash
 luarocks --lua-version=5.5 make
