@@ -1,0 +1,43 @@
+% docs/README 2025-12-09
+
+For generation of "docs/manual.html", "docs/manual.pdf" and "docs/manual.txt" from "manual.pmd"
+and man page "docs/zint.1" from "docs/zint.1.pmd" using pandoc >= 3.8.2.
+
+On Ubuntu/Debian (tested on Ubuntu 22.04 and Ubuntu 24.04)
+
+    wget https://github.com/jgm/pandoc/releases/download/3.8.3/pandoc-3.8.3-1-amd64.deb
+    sudo dpkg -i pandoc-3.8.3-1-amd64.deb
+    sudo apt install librsvg2-bin
+    sudo apt install texlive-xetex
+    sudo apt install texlive-lang-cjk
+    sudo apt install fonts-wqy-microhei
+    make
+
+On Fedora (tested on Fedora Linux 38 (Workstation Edition) and Fedora Linux 42 (Workstation Edition))
+
+    wget https://github.com/jgm/pandoc/releases/download/3.8.3/pandoc-3.8.3-linux-amd64.tar.gz
+    tar xf pandoc-3.8.3-linux-amd64.tar.gz
+    sudo mv -i pandoc-3.8.3/bin/pandoc /usr/local/bin
+    sudo dnf install librsvg2-tools.x86_64
+    sudo dnf install texlive-xetex
+    sudo dnf install texlive-ctex.noarch
+    sudo dnf install texlive-framed.noarch
+    sudo dnf install texlive-fvextra.noarch
+    sudo dnf install texlive-mdwtools.noarch
+    sudo dnf install texlive-sectsty.noarch
+    sudo dnf install texlive-xecjk.noarch
+    sudo dnf install texlive-tex-gyre.noarch
+    sudo dnf install wqy-microhei-fonts.noarch
+    make
+
+On Windows
+
+    Not compatible.
+
+On BSD
+
+    TODO
+
+On macOS
+
+    TODO

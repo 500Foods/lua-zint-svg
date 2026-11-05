@@ -1,0 +1,56 @@
+lua-zint-svg
+Copyright (c) 2026 Andrew Simard and 500Foods
+
+The Lua in this repository is published under the MIT license in LICENSE.
+Other notices travel with it.
+
+libzint
+-------
+
+The encoders, the vector geometry, the SVG writer, the GS1 reduction, the ECI
+conversion, the Reed-Solomon code, and the float32 narrowing are a behavioral
+port of libzint from zint 2.16.0 (https://github.com/zint/zint,
+https://zint.org.uk). libzint is Copyright (C) 2008-2025 Robin Stuart
+<rstuart114@gmail.com> and contributors, and is licensed under the
+BSD-3-Clause license. A copy is in vendor/zint/LICENSE. The conditions that
+matter here:
+
+1. Redistributions of source code must retain the copyright notice, the
+   conditions, and the disclaimer.
+2. Redistributions in binary form must reproduce them in the documentation
+   or other materials provided with the distribution.
+3. Neither the name of the project nor the names of its contributors may be
+   used to endorse or promote products derived from this software without
+   specific prior written permission.
+
+This project is not affiliated with the zint project, and the names of Robin
+Stuart and the zint project are not an endorsement of lua-zint-svg.
+
+vendor/zint is the upstream tree, kept so the remaining symbologies can be
+read from it and so SVG output can be compared against that release. It is
+not part of the Lua rock. The libzint backend in that tree is BSD-3-Clause.
+The command-line program and the Qt front end are GPL-3.0-or-later. Their
+license files stay next to that source.
+
+Option parser
+-------------
+
+src/zint/options.lua is MIT. It was written from the zint 2.16.0 manual and
+from byte comparison against the pinned command-line program. It is not a
+clean-room file: an earlier transcription of the GPL-3 frontend/main.c option
+parser was read while the port was being built. That transcription is not in
+this repository.
+
+Fonts
+-----
+
+src/zint/fonts.lua embeds two fonts, used only when --embedfont is set.
+
+Arimo (Latin-1 subset, WOFF2), Copyright 2013 Steve Matteson, Apache License
+2.0. See http://www.apache.org/licenses/LICENSE-2.0
+
+OCR-B digit subset, adapted from OCR-B font version 0.2 by Matthew Skala
+(2011), based on Metafont definitions by Norbert Schwarz (1986, 2011).
+Matthew Skala's digitization is released for unrestricted use and
+distribution. A previous non-commercial restriction on that digitization has
+been lifted. See https://tsukurimashou.osdn.jp/ocr.php.en

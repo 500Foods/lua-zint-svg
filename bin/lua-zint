@@ -1,0 +1,127 @@
+#!/usr/bin/env lua
+-- bin/lua-zint -- bash-callable front end for the pure-Lua port.
+--
+-- Accepts the same flag forms as zint for the options this port implements
+-- (-b 8, --barcode=8, --barcode 8). Values are handed to zint.barcode as
+-- strings, so float parsing happens inside the port. Booleans are present
+-- only when set. Colour options are resolved here, where argument order is
+-- still visible: an option is kept only when it is still the last writer of
+-- at least one colour field it writes.
+
+os.setlocale("C")
+
+local script = arg[0]
+local dir = script:match("^(.*)/") or "."
+package.path = dir .. "/../src/?.lua;" .. dir .. "/../src/?/init.lua;" .. package.path
+
+local BOOLEAN = {
+  gs1 = true, gs1parens = true, nobackground = true, reverse = true,
+  heightperrow = true, compliantheight = true, quietzones = true,
+  noquietzones = true, bind = true, bindtop = true, box = true,
+  notext = true, small = true, bold = true, embedfont = true,
+  dotty = true, esc = true, extraesc = true, init = true,
+}
+
+local SHORT = {
+  b = "barcode", d = "data", o = "output", w = "whitesp", r = "reverse",
+}
+
+local function die(msg)
+  io.stderr:write("lua-zint: ", msg, "\n")
+  os.exit(2)
+end
+
+local raw = {}
+local function push(k, v)
+  raw[#raw + 1] = { k, v }
+end
+
+local i = 1
+while i <= #arg do
+  local a = arg[i]
+  local key, val = a:match("^%-%-(%a[%w]*)=(.*)$")
+  if key then
+    if BOOLEAN[key] then die("option does not take a value: --" .. key) end
+    push(key, val)
+    i = i + 1
+  elseif a:match("^%-%-%a[%w]*$") then
+    key = a:sub(3)
+    if BOOLEAN[key] then
+      push(key, "true")
+      i = i + 1
+    else
+      local nxt = arg[i + 1]
+      if nxt == nil then die("missing value for --" .. key) end
+      push(key, nxt)
+      i = i + 2
+    end
+  elseif a:match("^%-%a$") then
+    local short = a:sub(2, 2)
+    key = SHORT[short]
+    if not key then die("unsupported option: " .. a) end
+    if BOOLEAN[key] then
+      push(key, "true")
+      i = i + 1
+    else
+      local nxt = arg[i + 1]
+      if nxt == nil then die("missing value for " .. a) end
+      push(key, nxt)
+      i = i + 2
+    end
+  else
+    die("unsupported option: " .. a)
+  end
+end
+
+-- Last writer of each colour field wins. An earlier option is dropped when
+-- every field it writes was written again later. The port then applies the
+-- survivors in a fixed order and does not need a second tie-break.
+local COLOUR_FIELDS = {
+  reverse = { "fg", "bg" },
+  fg = { "fg" },
+  bg = { "bg" },
+  nobackground = { "bg" },
+}
+local last_seen = {}
+local written_by = {}
+for n = 1, #raw do
+  local fields = COLOUR_FIELDS[raw[n][1]]
+  if fields then
+    last_seen[raw[n][1]] = n
+    for j = 1, #fields do written_by[fields[j]] = n end
+  end
+end
+local drop = {}
+for k, pos in pairs(last_seen) do
+  local survives = false
+  for j = 1, #COLOUR_FIELDS[k] do
+    if written_by[COLOUR_FIELDS[k][j]] == pos then survives = true end
+  end
+  if not survives then drop[k] = true end
+end
+
+local opts = {}
+for n = 1, #raw do
+  local k, v = raw[n][1], raw[n][2]
+  if not drop[k] then
+    if BOOLEAN[k] then
+      opts[k] = (v == "true")
+    elseif k == "barcode" then
+      opts[k] = tonumber(v) or v
+    else
+      opts[k] = v
+    end
+  end
+end
+
+local zint = require "zint"
+local out, warning, option_warned = zint.barcode(opts)
+if out == nil then
+  io.stderr:write(warning or "error", "\n")
+  os.exit(8)
+end
+if not opts.output then
+  if type(out) == "table" then io.write(out.content) else io.write(out) end
+end
+if warning or option_warned then os.exit(2) end
+os.exit(0)

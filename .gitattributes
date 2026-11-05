@@ -3,4 +3,5 @@
 *.css linguist-detectable=false  
 *.js linguist-detectable=false  
 *.html linguist-detectable=false 
-*.ps1 linguist-detectable=false 
+*.ps1 linguist-detectable=false
+vendor/** linguist-vendored

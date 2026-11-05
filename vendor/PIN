@@ -1,0 +1,5 @@
+tag: 2.16.0
+commit: 55541e139e62b9209b71cd9b0ba9010cec28b1d9
+url: https://github.com/zint/zint/releases/tag/2.16.0
+source: https://github.com/zint/zint/archive/refs/tags/2.16.0.tar.gz
+built-with: -DZINT_USE_QT=OFF -DZINT_USE_PNG=OFF -DZINT_USE_GS1SE=OFF

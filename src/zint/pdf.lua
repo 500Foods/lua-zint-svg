@@ -1,0 +1,101 @@
+-- src/zint/pdf.lua -- PDF Form XObject content stream from symbol.vector.
+--
+-- Sibling of svg.lua. It reads the vector list. It does not parse SVG.
+-- The origin is the bottom left and y grows up. SVG y grows down, so each
+-- anchor is flipped across the vector height. The report writer supplies the
+-- object number, the stream dictionary, and the Do invocation.
+--
+-- Rectangles are the bars. Text is the human-readable line, named as
+-- Helvetica and not embedded. UPC-A digit widths will not match OCR-B.
+-- Circles (dotty mode) are four cubic beziers.
+
+local common = require "zint.common"
+
+local M = {}
+local f32 = common.stripf
+
+local function num(v)
+  local s = ("%.8f"):format(v)
+  s = s:gsub("0+$", ""):gsub("%.$", "")
+  if s == "-0" then s = "0" end
+  return s
+end
+
+local function pdf_string(text)
+  return "(" .. text:gsub("\\", "\\\\"):gsub("%(", "\\("):gsub("%)", "\\)") .. ")"
+end
+
+local function flip_y(height, y, h)
+  return f32(f32(height - y) - (h or 0))
+end
+
+-- One circle as a closed cubic. kappa is the standard 4*(sqrt(2)-1)/3.
+local KAPPA = f32(0.5522847498)
+
+local function circle_ops(out, cx, cy, r)
+  local k = f32(KAPPA * r)
+  out[#out + 1] = num(cx - r) .. " " .. num(cy) .. " m\n"
+  out[#out + 1] = num(cx - r) .. " " .. num(cy + k) .. " "
+    .. num(cx - k) .. " " .. num(cy + r) .. " "
+    .. num(cx) .. " " .. num(cy + r) .. " c\n"
+  out[#out + 1] = num(cx + k) .. " " .. num(cy + r) .. " "
+    .. num(cx + r) .. " " .. num(cy + k) .. " "
+    .. num(cx + r) .. " " .. num(cy) .. " c\n"
+  out[#out + 1] = num(cx + r) .. " " .. num(cy - k) .. " "
+    .. num(cx + k) .. " " .. num(cy - r) .. " "
+    .. num(cx) .. " " .. num(cy - r) .. " c\n"
+  out[#out + 1] = num(cx - k) .. " " .. num(cy - r) .. " "
+    .. num(cx - r) .. " " .. num(cy - k) .. " "
+    .. num(cx - r) .. " " .. num(cy) .. " c\n"
+  out[#out + 1] = "h\nf\n"
+end
+
+local function text_matrix(rotation, x, y)
+  if rotation == 90 then
+    return "0 1 -1 0 " .. num(x) .. " " .. num(y) .. " Tm\n"
+  elseif rotation == 180 then
+    return "-1 0 0 -1 " .. num(x) .. " " .. num(y) .. " Tm\n"
+  elseif rotation == 270 then
+    return "0 -1 1 0 " .. num(x) .. " " .. num(y) .. " Tm\n"
+  end
+  return "1 0 0 1 " .. num(x) .. " " .. num(y) .. " Tm\n"
+end
+
+function M.form(symbol)
+  local vector = symbol.vector
+  local height = vector.height
+  local out = {}
+
+  out[#out + 1] = "0 0 0 rg\n"
+  for _, rect in ipairs(vector.rectangles) do
+    local y = flip_y(height, rect.y, rect.height)
+    out[#out + 1] = num(rect.x) .. " " .. num(y) .. " "
+      .. num(rect.width) .. " " .. num(rect.height) .. " re\nf\n"
+  end
+
+  for _, circle in ipairs(vector.circles) do
+    local r = f32(0.5 * circle.diameter)
+    local cy = flip_y(height, circle.y, 0)
+    circle_ops(out, circle.x, cy, r)
+  end
+
+  for _, str in ipairs(vector.strings) do
+    local y = flip_y(height, str.y, 0)
+    out[#out + 1] = "BT\n"
+    out[#out + 1] = "/F1 " .. num(str.fsize) .. " Tf\n"
+    out[#out + 1] = text_matrix(str.rotation or 0, str.x, y)
+    out[#out + 1] = pdf_string(str.text) .. " Tj\n"
+    out[#out + 1] = "ET\n"
+  end
+
+  return {
+    kind = "form-xobject",
+    bbox = { 0, 0, vector.width, vector.height },
+    content = table.concat(out),
+    resources = {
+      Font = { F1 = { BaseFont = "Helvetica", Subtype = "Type1" } },
+    },
+  }
+end
+
+return M
