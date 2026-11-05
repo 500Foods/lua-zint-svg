@@ -44,6 +44,8 @@ This release draws these, by name or by id:
     ITF-14                        89
     NVE-18 (SSCC)                 75
     QR Code                       58
+    GS1 DataBar Omnidirectional          29
+    GS1 DataBar Stacked Omnidirectional  80
     GS1 DataBar Expanded          31
     GS1 DataBar Expanded Stacked  81
 
@@ -64,6 +66,13 @@ Interleaved 2 of 5 adds that zone only with quietzones.
 NVE-18 is the 18-digit SSCC, drawn as GS1-128. It takes up to 18
 digits, pads to 17, and appends or checks the GS1 check digit. The
 command-line name is nve18. Its quiet zone is added with quietzones.
+
+GS1 DataBar Omnidirectional takes up to 14 digits. Thirteen are
+padded and the check digit is appended. Fourteen must include the
+right check digit. A (01), [01], or leading 01 of the right length
+is stripped. Stacked Omnidirectional is the same symbol in two
+rows and has no human-readable line. Neither variant has a quiet
+zone. --gs1 is refused. The short names are dbaromn and dbaromnstk.
 
 GS1 DataBar Expanded takes a GS1 element string. Expanded Stacked
 is the same symbol broken into rows. cols sets the columns per row

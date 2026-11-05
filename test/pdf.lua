@@ -110,8 +110,10 @@ local function check(name, symbol)
       return fail(name, "font scaler")
     end
   end
-  -- QR has no text line. Expanded Stacked (81) does not either.
-  local no_hrt = symbol.symbology == 58 or symbol.symbology == 81
+  -- QR has no text line. Expanded Stacked (81) and Stacked
+  -- Omnidirectional (80) do not either.
+  local no_hrt = symbol.symbology == 58 or symbol.symbology == 80
+      or symbol.symbology == 81
   if not no_hrt and #vec.strings == 0 then
     return fail(name, "symbol has no human-readable text")
   end
@@ -182,6 +184,14 @@ s = symbol(81)
 ok, err = dbar.expanded(s, "[01]09501101530003[17]140704[10]AB-123")
 if not ok then fail("dbarexpstk", err) else check("dbarexpstk", s) end
 
+s = symbol(29)
+ok, err = dbar.omn(s, "09501101530003")
+if not ok then fail("dbaromn", err) else check("dbaromn", s) end
+
+s = symbol(80)
+ok, err = dbar.omn(s, "09501101530003")
+if not ok then fail("dbaromnstk", err) else check("dbaromnstk", s) end
+
 -- --notext clears show_hrt, so the form has bars and no font field.
 s = symbol(20)
 s.show_hrt = 0
@@ -231,4 +241,4 @@ ok, err = upcean.upca(s, "12345678901")
 if not ok then fail("embedfont-upca", err) else check_embed("embedfont-upca", s, "OCRB", woff.upcean) end
 
 if failed > 0 then os.exit(1) end
-io.write("pdf  13 symbologies\n")
+io.write("pdf  15 symbologies\n")

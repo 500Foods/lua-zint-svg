@@ -33,6 +33,8 @@ local cases = {
   { file = "qr.svg",       barcode = 58, data = "HELLO" },
   { file = "dbarexp.svg",  barcode = 31, data = "[01]09501101530003[17]140704[10]AB-123" },
   { file = "dbarexpstk.svg", barcode = 81, data = "[01]09501101530003[17]140704[10]AB-123" },
+  { file = "dbaromn.svg", barcode = 29, data = "09501101530003" },
+  { file = "dbaromnstk.svg", barcode = 80, data = "09501101530003" },
 }
 
 local failed = 0

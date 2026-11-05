@@ -104,11 +104,11 @@ end
 -- encodes. The others fall through to the same "application defined" default
 -- the library uses for Code 128 and Code 39.
 local function default_xdim(symbology)
-  -- GS1 retail X is 0.33mm: EAN, UPC, and DataBar Expanded. QR is the
+  -- GS1 retail X is 0.33mm: EAN, UPC, and DataBar. QR is the
   -- fixed-ratio default. Everything else is the GS1-128 application default.
-  if symbology == 10 or symbology == 15 or symbology == 31 or symbology == 34
-      or symbology == 35 or symbology == 37 or symbology == 38
-      or symbology == 81 then
+  if symbology == 10 or symbology == 15 or symbology == 29 or symbology == 31
+      or symbology == 34 or symbology == 35 or symbology == 37
+      or symbology == 38 or symbology == 80 or symbology == 81 then
     return f32(0.33)
   end
   if symbology == 58 then return f32(0.625) end

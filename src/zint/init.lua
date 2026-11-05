@@ -65,7 +65,8 @@
 --   zint/code128.lua  backend/code128.c  Code 128, GS1-128, NVE-18
 --   zint/upcean.lua   backend/upcean.c   UPC-A, UPC-E, EAN-8, EAN-13
 --   zint/c25inter.lua backend/2of5inter.c  Interleaved 2 of 5, ITF-14
---   zint/dbar.lua     backend/rss.c      GS1 DataBar Expanded, Expanded Stacked
+--   zint/dbar.lua     backend/rss.c      GS1 DataBar Expanded, Expanded Stacked,
+--                                      Omnidirectional, Stacked Omnidirectional
 --   zint/gs1.lua      backend/gs1.c      GS1 AI parsing and input reduction
 --   zint/eci.lua      backend/eci.c      UTF-8 to ISO 8859-1
 --   zint/options.lua  (this repo)        option parsing, from the manual and the CLI
@@ -108,8 +109,10 @@ local BARCODE_UPCA_CHK  = 35
 local BARCODE_UPCE      = 37
 local BARCODE_UPCE_CHK  = 38
 local BARCODE_QRCODE    = 58
+local BARCODE_DBAR_OMN  = 29
 local BARCODE_DBAR_EXP  = 31
 local BARCODE_NVE18     = 75
+local BARCODE_DBAR_OMNSTK = 80
 local BARCODE_DBAR_EXPSTK = 81
 local BARCODE_ITF14     = 89
 
@@ -126,7 +129,20 @@ local NAMES = {
   interleavedcode2of5 = BARCODE_C25INTER,
   itf14    = BARCODE_ITF14,
   nve18    = BARCODE_NVE18,
-  -- GS1 DataBar Expanded. frontend/main.c, composite synonyms left out.
+  -- GS1 DataBar. frontend/main.c, composite synonyms left out.
+  -- Omnidirectional takes digits. It is not force-gs1, and --gs1 is refused.
+  dbaromn = BARCODE_DBAR_OMN,
+  dbaromni = BARCODE_DBAR_OMN,
+  databaromn = BARCODE_DBAR_OMN,
+  databaromni = BARCODE_DBAR_OMN,
+  rss14 = BARCODE_DBAR_OMN,
+  dbaromnstk = BARCODE_DBAR_OMNSTK,
+  databaromnstk = BARCODE_DBAR_OMNSTK,
+  dbarstackedomn = BARCODE_DBAR_OMNSTK,
+  dbarstackedomni = BARCODE_DBAR_OMNSTK,
+  databarstackedomn = BARCODE_DBAR_OMNSTK,
+  databarstackedomni = BARCODE_DBAR_OMNSTK,
+  rss14stackomni = BARCODE_DBAR_OMNSTK,
   databarexp = BARCODE_DBAR_EXP,
   databarexpanded = BARCODE_DBAR_EXP,
   dbarexp = BARCODE_DBAR_EXP,
@@ -204,6 +220,10 @@ local ENCODERS = {
   -- Expanded calls gs1_verify itself. Stacked has no human-readable text.
   [BARCODE_DBAR_EXP] = dbar.expanded,
   [BARCODE_DBAR_EXPSTK] = dbar.expanded,
+  -- Omnidirectional checks its own digit string. It is not gs1-compliant, so
+  -- the driver refuses --gs1 and does not reduce the input first.
+  [BARCODE_DBAR_OMN] = dbar.omn,
+  [BARCODE_DBAR_OMNSTK] = dbar.omn,
 }
 
 -- backend/library.c `check_force_gs1()`. These are in GS1 mode whether or not

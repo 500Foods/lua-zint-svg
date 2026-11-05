@@ -41,6 +41,8 @@ local form = zint.barcode({
 | ITF-14 | 89 | yes | vectors |
 | NVE-18 (SSCC) | 75 | yes | vectors |
 | QR Code | 58 | yes | vectors |
+| GS1 DataBar Omnidirectional | 29 | yes | vectors |
+| GS1 DataBar Stacked Omnidirectional | 80 | yes | vectors |
 | GS1 DataBar Expanded | 31 | yes | vectors |
 | GS1 DataBar Expanded Stacked | 81 | yes | vectors |
 
@@ -50,11 +52,13 @@ Interleaved 2 of 5 takes digits. An odd count grows a leading zero. `--vers 1` a
 
 NVE-18 is the 18-digit SSCC, drawn as GS1-128. It takes up to 18 digits, pads to 17, and appends or checks the GS1 check digit. A `(00)`, `[00]`, or leading `00` of the right length is stripped. The name on the command line is `nve18`. Its quiet zone is added with `--quietzones`.
 
+GS1 DataBar Omnidirectional takes up to 14 digits. Thirteen are padded and the check digit is appended. Fourteen must include the right check digit. A `(01)`, `[01]`, or leading `01` of the right length is stripped. The human-readable line is `(01)` plus the 14-digit GTIN. Stacked Omnidirectional is the same symbol in two rows, and it has no human-readable line. Neither variant has a quiet zone. `--gs1` is refused: this is a GTIN, not an element string. The short names are `dbaromn` and `dbaromnstk`.
+
 GS1 DataBar Expanded takes a GS1 element string, the same bracketed Application Identifiers as GS1-128. Expanded Stacked is the same symbol broken into rows. `--cols` sets the columns per row (1 to 11, default 2). `--rows` sets the maximum rows (2 to 11) when `--cols` is omitted. Stacked symbols have no human-readable line. Neither variant has a quiet zone. The short names are `dbarexp` and `dbarexpstk`.
 
 UPC and EAN human-readable digits are placed at OCR-B advances. The report writer embeds OCR-B and uses those positions. The PDF form names Helvetica as a placeholder font, so the bars match the SVG while the digit slots follow OCR-B. SVG draws those digits in the bundled OCR-B face and every other symbol in Arimo. `--embedfont` inlines the SVG face.
 
-This release draws those fifteen. Not yet: Code 11, Code 2 of 5 Standard, IATA, Data Logic, and Industrial, Extended Code 39, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, MSI Plessey, Plessey, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar Omnidirectional, Limited, Stacked, and Stacked Omnidirectional, Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbols, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols.
+This release draws those seventeen. Not yet: Code 11, Code 2 of 5 Standard, IATA, Data Logic, and Industrial, Extended Code 39, the standalone EAN add-ons, Codabar, Code 93, Code 16k, Code 49, Telepen, MSI Plessey, Plessey, ISBN, Code 32, VIN, LOGMARS, Pharmacode, PZN, GS1 DataBar Limited and Stacked, Data Matrix, Aztec, MaxiCode, Micro QR, rMQR, Han Xin, DotCode, Grid Matrix, Ultracode, Code One, PDF417, MicroPDF417, Codablock-F, the postal symbols, the HIBC family, DAFT, DPD, Channel Code, BC412, DX Film Edge, and the composite symbols.
 
 ## Behaviour
 

@@ -25,5 +25,6 @@ bash upce.sh
 bash c25inter.sh
 bash nve18.sh
 bash dbar.sh
+bash dbaromn.sh
 bash fuzz.sh "${FUZZ_ROUNDS:-5}"
 bash stressqr.sh "${STRESS_ROUNDS:-1}"

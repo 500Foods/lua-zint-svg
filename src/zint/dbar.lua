@@ -1,9 +1,12 @@
--- zint/dbar.lua -- GS1 DataBar Expanded (31) and Expanded Stacked (81).
+-- zint/dbar.lua -- GS1 DataBar.
 --
--- backend/rss.c `zint_dbar_exp()` / `zint_dbar_exp_cc()` with cc_rows left at
--- 0, plus the general-purpose compaction those two call
--- (backend/general_field.c). Omnidirectional, Limited, and the composite
--- forms are not encoded here.
+-- Expanded (31) and Expanded Stacked (81): backend/rss.c `zint_dbar_exp()` /
+-- `zint_dbar_exp_cc()` with cc_rows left at 0, plus the general-purpose
+-- compaction those two call (backend/general_field.c).
+--
+-- Omnidirectional (29) and Stacked Omnidirectional (80): `zint_dbar_omn()` /
+-- `zint_dbar_omn_cc()` with cc_rows left at 0. Limited, the non-omnidirectional
+-- stacked form, and the composite forms are not encoded here.
 --
 -- The reduced GS1 string this port already uses marks FNC1 with "[", because
 -- that is what gs1.lua and the Code 128 / QR encoders agreed on. The C
@@ -15,7 +18,9 @@ local gs1 = require "zint.gs1"
 
 local M = {}
 
+local BARCODE_DBAR_OMN = 29
 local BARCODE_DBAR_EXP = 31
+local BARCODE_DBAR_OMNSTK = 80
 local BARCODE_DBAR_EXPSTK = 81
 
 local GF_NUMERIC = 110
@@ -871,6 +876,259 @@ function M.expanded(symbol, source)
   end
 
   apply_height(symbol, stack_rows)
+  return true
+end
+
+-- ---------------------------------------------------------------- omn
+
+-- backend/rss.h, DataBar Omnidirectional tables.
+local OMN_G_SUM = vec { 0, 161, 961, 2015, 2715, 0, 336, 1036, 1516 }
+local OMN_T_EVEN_ODD = vec { 1, 10, 34, 70, 126, 4, 20, 48, 81 }
+local OMN_MODULES = vec {
+  12, 10, 8, 6, 4, -- outside odd
+   5,  7, 9, 11,   -- inside odd
+   4,  6, 8, 10, 12, -- outside even
+  10,  8, 6,  4,   -- inside even
+}
+local OMN_WIDEST = vec { 8, 6, 4, 3, 1, 2, 4, 6, 8 }
+local OMN_FINDER = rows {
+  { 3, 8, 2, 1, 1 },
+  { 3, 5, 5, 1, 1 },
+  { 3, 3, 7, 1, 1 },
+  { 3, 1, 9, 1, 1 },
+  { 2, 7, 4, 1, 1 },
+  { 2, 5, 6, 1, 1 },
+  { 2, 3, 8, 1, 1 },
+  { 1, 5, 7, 1, 1 },
+  { 1, 3, 9, 1, 1 },
+}
+local OMN_CHECKSUM = rows {
+  {  1,  3,  9, 27,  2,  6, 18, 54 },
+  {  4, 12, 36, 29,  8, 24, 72, 58 },
+  { 16, 48, 65, 37, 32, 17, 51, 74 },
+  { 64, 34, 23, 69, 49, 68, 46, 59 },
+}
+
+-- backend/gs1.c `gs1_check_digit()`. Local copy; the other encoders keep theirs.
+local function gs1_check_digit(source, length)
+  local count = 0
+  local factor = (length & 1) ~= 0 and 3 or 1
+  for i = 1, length do
+    count = count + factor * (source:byte(i) - 48)
+    factor = factor ~ 2
+  end
+  return string.char(48 + (10 - (count % 10)) % 10)
+end
+
+-- backend/rss.c `dbar_gtin14()`. Thirteen digits, zero padded, plus the check.
+local function gtin14(source)
+  local buf = string.rep("0", 13 - #source) .. source
+  return buf .. gs1_check_digit(buf, 13)
+end
+
+-- backend/common.c `z_not_sane(NEON_F)`. 1-based position, or 0.
+local function not_sane_digits(source)
+  for i = 1, #source do
+    local b = source:byte(i)
+    if b < 48 or b > 57 then return i end
+  end
+  return 0
+end
+
+-- backend/rss.c `dbar_omn_group()`. Outside groups are 0..4, inside are 5..8.
+local function dbar_omn_group(val, outside)
+  local i = outside and 0 or 5
+  local last = 8 >> (outside and 1 or 0)
+  while i < last do
+    if val < OMN_G_SUM[i + 1] then return i end
+    i = i + 1
+  end
+  return i
+end
+
+-- backend/rss.c `dbar_omn_finder_adjust()`.
+local function dbar_omn_finder_adjust(symbol, separator_row, above_below, finder_start)
+  local module_row = separator_row + above_below
+  local latch = true
+  for i = finder_start, finder_start + 12 do
+    if common.module_is_set(symbol, module_row, i) == 0 then
+      if latch then
+        common.set_module(symbol, separator_row, i)
+        latch = false
+      else
+        unset_module(symbol, separator_row, i)
+        latch = true
+      end
+    else
+      unset_module(symbol, separator_row, i)
+      latch = true
+    end
+  end
+end
+
+-- backend/rss.c `dbar_omn_separator()`. A finder start of 0 means "no finder".
+-- 0 is truthy in Lua, so that test is written `~= 0`. `bottom_finder_value_3`
+-- is a real boolean for the same reason.
+local function dbar_omn_separator(symbol, width, separator_row, above_below,
+    finder_start, finder2_start, bottom_finder_value_3)
+  local module_row = separator_row + above_below
+  local limit = width - 4
+  for i = 4, limit - 1 do
+    if common.module_is_set(symbol, module_row, i) == 0 then
+      common.set_module(symbol, separator_row, i)
+    end
+  end
+  if bottom_finder_value_3 then
+    local finder_value_3_set = finder_start + 10
+    for i = finder_start, finder_start + 12 do
+      if i == finder_value_3_set then
+        common.set_module(symbol, separator_row, i)
+      else
+        unset_module(symbol, separator_row, i)
+      end
+    end
+  else
+    if finder_start ~= 0 then
+      dbar_omn_finder_adjust(symbol, separator_row, above_below, finder_start)
+    end
+    if finder2_start ~= 0 then
+      dbar_omn_finder_adjust(symbol, separator_row, above_below, finder2_start)
+    end
+  end
+end
+
+-- GS1 DataBar Omnidirectional (29) and Stacked Omnidirectional (80).
+-- Digits, not an element string. An optional "(01)", "[01]", or "01" prefix
+-- is accepted only at the lengths the C checks. --gs1 is refused by the
+-- driver: these two are not gs1-compliant in library.c.
+function M.omn(symbol, source)
+  local n = #source
+  if (n == 17 or n == 18) and (source:sub(1, 4) == "[01]" or source:sub(1, 4) == "(01)") then
+    source = source:sub(5)
+  elseif (n == 15 or n == 16) and source:sub(1, 2) == "01" then
+    source = source:sub(3)
+  end
+
+  if #source > 14 then
+    return nil, string.format(
+      "Error 380: Input length %d too long (maximum 14)", #source)
+  end
+  local bad = not_sane_digits(source)
+  if bad ~= 0 then
+    return nil, string.format(
+      "Error 381: Invalid character at position %d in input (digits only)", bad)
+  end
+  if #source == 14 then
+    local expect = gs1_check_digit(source, 13)
+    if source:sub(14, 14) ~= expect then
+      return nil, string.format(
+        "Error 388: Invalid check digit '%s', expecting '%s'",
+        source:sub(14, 14), expect)
+    end
+    source = source:sub(1, 13)
+  end
+
+  if symbol.symbology ~= BARCODE_DBAR_OMN then
+    symbol.rows = 0
+  end
+
+  local val = 0
+  for i = 1, #source do
+    val = val * 10 + source:byte(i) - 48
+  end
+  local left_pair = val // 4537077
+  local right_pair = val % 4537077
+  local data_character = {
+    [0] = left_pair // 1597,
+    [1] = left_pair % 1597,
+    [2] = right_pair // 1597,
+    [3] = right_pair % 1597,
+  }
+
+  local data_widths = {}
+  for i = 0, 3 do
+    local outside = (i & 1) == 0
+    local group = dbar_omn_group(data_character[i], outside)
+    local v = data_character[i] - OMN_G_SUM[group]
+    local divisor = OMN_T_EVEN_ODD[group]
+    local v_div = v // divisor
+    local v_mod = v % divisor
+    data_widths[i] = dbar_widths(
+      outside and v_div or v_mod,
+      (not outside) and v_div or v_mod,
+      OMN_MODULES[group], OMN_MODULES[group + 9],
+      4, OMN_WIDEST[group], not outside)
+  end
+
+  local checksum = 0
+  for i = 0, 3 do
+    local weights = OMN_CHECKSUM[i]
+    local cw = data_widths[i]
+    for j = 0, 7 do
+      checksum = checksum + weights[j] * cw[j]
+    end
+  end
+  checksum = checksum % 79
+  if checksum >= 8 then checksum = checksum + 1 end
+  if checksum >= 72 then checksum = checksum + 1 end
+  local c_left = checksum // 9
+  local c_right = checksum % 9
+
+  local total = {}
+  total[0], total[1], total[44], total[45] = 1, 1, 1, 1
+  for i = 0, 7 do
+    total[i + 2] = data_widths[0][i]
+    total[i + 15] = data_widths[1][7 - i]
+    total[i + 23] = data_widths[3][i]
+    total[i + 36] = data_widths[2][7 - i]
+  end
+  local finder_l = OMN_FINDER[c_left]
+  local finder_r = OMN_FINDER[c_right]
+  for i = 0, 4 do
+    total[i + 10] = finder_l[i]
+    total[i + 31] = finder_r[4 - i]
+  end
+
+  local compliant = (symbol.output_options & common.COMPLIANT_HEIGHT) ~= 0
+  if symbol.symbology == BARCODE_DBAR_OMN then
+    local writer = dbar_expand(symbol, 0, false, total, 0, 46)
+    if symbol.width < writer then symbol.width = writer end
+    symbol.rows = symbol.rows + 1
+    symbol.text = "(01)" .. gtin14(source)
+    if compliant then
+      common.set_height(symbol, 13.0, 33.0, 0.0)
+    else
+      common.set_height(symbol, 0.0, 50.0, 0.0)
+    end
+  else
+    local writer = dbar_expand(symbol, 0, false, total, 0, 23)
+    common.set_module(symbol, symbol.rows, writer)
+    unset_module(symbol, symbol.rows, writer + 1)
+
+    symbol.rows = symbol.rows + 4
+    common.set_module(symbol, symbol.rows, 0)
+    unset_module(symbol, symbol.rows, 1)
+    dbar_expand(symbol, 2, true, total, 23, 46)
+
+    for i = 5, 45, 2 do
+      common.set_module(symbol, symbol.rows - 2, i)
+    end
+    symbol.row_height[symbol.rows - 2] = 1
+
+    dbar_omn_separator(symbol, 50, symbol.rows - 3, -1, 18, 0, false)
+    symbol.row_height[symbol.rows - 3] = 1
+
+    dbar_omn_separator(symbol, 50, symbol.rows - 1, 1, 19, 0, c_right == 3)
+    symbol.row_height[symbol.rows - 1] = 1
+    if symbol.width < 50 then symbol.width = 50 end
+    symbol.rows = symbol.rows + 1
+
+    if compliant then
+      common.set_height(symbol, 33.0, 66.0, 0.0)
+    else
+      common.set_height(symbol, 0.0, 66.0, 0.0)
+    end
+  end
   return true
 end
 
