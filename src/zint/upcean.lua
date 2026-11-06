@@ -2,10 +2,13 @@
 --
 -- upcean.c handles the whole EAN/UPC family in one file: EAN-13, EAN-8, UPC-A,
 -- UPC-E, ISBN, and the two- and five-digit add-ons that can hang off any of
--- them. Encoded here: UPC-A (34 and 35), UPC-E (37 and 38), EAN-13 (15), and
--- EAN-8 (10). EAN-13 and EAN-8 have no separate check-digit id. UPC-E does:
+-- them. Encoded here: UPC-A (34 and 35), UPC-E (37 and 38), EAN-13 (15),
+-- EAN-8 (10), ISBN (69), and the standalone EAN-2 (11) and EAN-5 (12)
+-- add-ons. EAN-13 and EAN-8 have no separate check-digit id. UPC-E does:
 -- 37 computes the check, 38 requires it, and an 8-digit 37 still checks the
--- eighth. ISBN and the standalone add-on ids are still absent.
+-- eighth. ISBN is drawn as EAN-13. A 10-digit ISBN or a 9-digit SBN is
+-- turned into 978 plus the body, and the EAN-13 check digit replaces the
+-- ISBN check digit.
 --
 -- Two things about UPC-A make it unlike the four symbologies already here.
 --
@@ -891,6 +894,194 @@ function M.upce(symbol, source)
 
   common.expand(symbol, dest)
 
+  return true
+end
+
+-- ------------------------------------------------- standalone add-ons, ISBN
+
+-- 21.9mm from GS1 General Specifications 5.2.6.6, Figure 5.2.6.6-6.
+local ADDON_COMPLIANT_HEIGHT = f32(f32(21.9) / f32(0.33))
+
+local function too_long(n)
+  return nil, string.format("Error 283: Input length %d too long (maximum 19)", n)
+end
+
+-- Split on the first "+" or space and pad. `max` is the body's ceiling:
+-- 2, 5, or 13. An add-on symbology always reports a long body as Error 294,
+-- even when an add-on is also present.
+local function split_pad(source, max, addon_symbology)
+  local sep = source:find("[+ ]")
+  local first = sep and source:sub(1, sep - 1) or source
+  local second = sep and source:sub(sep + 1) or ""
+  local first_len, second_len = #first, #second
+
+  if first_len > max or second_len > 5 then
+    if first_len > max then
+      if second_len == 0 or addon_symbology then
+        return nil, nil, string.format(
+          "Error 294: Input length %d too long (maximum %d)", first_len, max)
+      end
+      return nil, nil, string.format(
+        "Error 298: Input EAN length %d too long (maximum %d)", first_len, max)
+    end
+    return nil, nil, string.format(
+      "Error 297: Input add-on length %d too long (maximum 5)", second_len)
+  end
+
+  local zfirst = max
+  if not addon_symbology then
+    zfirst = first_len <= 9 and 9 or first_len
+  end
+  local zsecond = 0
+  if second_len == 0 then
+    zsecond = 0
+  elseif second_len <= 2 then
+    zsecond = 2
+  else
+    zsecond = 5
+  end
+
+  first = string.rep("0", zfirst - first_len) .. first
+  if sep and zsecond > 0 then
+    second = string.rep("0", zsecond - second_len) .. second
+  else
+    second = ""
+  end
+  return first, second
+end
+
+local function addon_gap_of(symbol)
+  local o2 = symbol.option_2 or 0
+  return (o2 >= 7 and o2 <= 12) and o2 or 7
+end
+
+local function finish_addon(symbol, first, second)
+  local dest = ean_add_on(first, #first, "", 0)
+  symbol.text = first
+  if (symbol.output_options & common.COMPLIANT_HEIGHT) ~= 0 then
+    common.set_height(symbol, ADDON_COMPLIANT_HEIGHT, ADDON_COMPLIANT_HEIGHT, 0.0)
+  else
+    common.set_height(symbol, 0.0, 50.0, 0.0)
+  end
+  if #second > 0 then
+    dest = ean_add_on(second, #second, dest, addon_gap_of(symbol))
+    symbol.text = symbol.text .. "+" .. second
+  end
+  common.expand(symbol, dest)
+  return true
+end
+
+local function standalone(symbol, source, width)
+  if #source > 19 then return too_long(#source) end
+  local bad = source:find("[^0-9]")
+  if bad then
+    return nil, string.format(
+      "Error 852: Invalid character at position %d in input (digits only)", bad)
+  end
+  local _, sep_count = source:gsub("[+ ]", "")
+  if sep_count > 1 then
+    return nil, "Error 293: Invalid add-on data (one \"+\" or space only)"
+  end
+  local first, second, err = split_pad(source, width, true)
+  if not first then return nil, err end
+  return finish_addon(symbol, first, second)
+end
+
+function M.ean2(symbol, source)
+  return standalone(symbol, source, 2)
+end
+
+function M.ean5(symbol, source)
+  return standalone(symbol, source, 5)
+end
+
+-- ISBN-10 / SBN check. Weights are 1..9 over the nine digits that precede
+-- the check character. 10 is written "X".
+local function isbnx_check(source)
+  local sum = 0
+  for i = 1, 9 do
+    sum = sum + ctoi(source:sub(i, i)) * i
+  end
+  local check = sum % 11
+  if check == 10 then return "X" end
+  return string.char(48 + check)
+end
+
+-- Turn a padded ISBN or SBN into the 12-digit EAN-13 body. The EAN check
+-- digit is added by ean13_body.
+local function isbn_to_ean12(source)
+  source = source:upper()
+  if source:find("[^0-9X]") then
+    return nil, "Error 277: Invalid character in input (digits and \"X\" only)"
+  end
+  local length = #source
+  if length ~= 9 and length ~= 10 and length ~= 13 then
+    return nil, string.format(
+      "Error 278: Input length %d wrong (9, 10, or 13 characters required)", length)
+  end
+
+  if length == 13 then
+    if source:sub(1, 2) ~= "97" or (source:sub(3, 3) ~= "8" and source:sub(3, 3) ~= "9") then
+      return nil, "Error 279: Invalid ISBN (must begin with \"978\" or \"979\")"
+    end
+    if source:find("X", 1, true) then
+      return nil, "Error 282: Invalid character in input, \"X\" not allowed in ISBN-13"
+    end
+    local check = gs1_check_digit(source, 12)
+    if source:sub(13, 13) ~= check then
+      return nil, string.format(
+        "Error 280: Invalid ISBN check digit '%s', expecting '%s'",
+        source:sub(13, 13), check)
+    end
+    return source:sub(1, 12)
+  end
+
+  local original = length
+  if length == 9 then source = "0" .. source end
+  if source:sub(1, 9):find("[^0-9]") then
+    return nil, "Error 296: Invalid character in input, \"X\" allowed in last position only"
+  end
+  local check = isbnx_check(source)
+  local given = source:sub(10, 10)
+  if check ~= given then
+    return nil, string.format(
+      "Error 281: Invalid %s check digit '%s', expecting '%s'",
+      original == 9 and "SBN" or "ISBN", given, check)
+  end
+  return "978" .. source:sub(1, 9)
+end
+
+function M.isbn(symbol, source)
+  if #source > 19 then return too_long(#source) end
+  local bad = source:find("[^0-9Xx+ ]")
+  if bad then
+    return nil, string.format(
+      "Error 285: Invalid character at position %d in input (digits, \"X\" and \"+\" or space only)",
+      bad)
+  end
+  local _, sep_count = source:gsub("[+ ]", "")
+  if sep_count > 1 then
+    return nil, "Error 293: Invalid add-on data (one \"+\" or space only)"
+  end
+
+  local first, second, err = split_pad(source, 13, false)
+  if not first then return nil, err end
+
+  local body, berr = isbn_to_ean12(first)
+  if not body then return nil, berr end
+
+  local dest, derr = ean13_body(symbol, body, #body)
+  if not dest then return nil, derr end
+
+  if #second > 0 then
+    if second:find("[^0-9]") then
+      return nil, "Error 295: Invalid add-on data (digits only)"
+    end
+    dest = ean_add_on(second, #second, dest, addon_gap_of(symbol))
+    symbol.text = symbol.text .. "+" .. second
+  end
+
+  common.expand(symbol, dest)
   return true
 end
 

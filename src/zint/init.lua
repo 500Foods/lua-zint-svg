@@ -43,8 +43,12 @@
 --   rotate        0, 90, 180 or 270
 --   vers          Interleaved 2 of 5 check digit: 1 shows it, 2 hides it.
 --                 DataBar Expanded Stacked reads it as columns per row.
---   cols          DataBar Expanded Stacked columns per row, 1 to 11
---   rows          DataBar Expanded Stacked maximum rows, 2 to 11
+--                 Data Matrix reads it as the symbol size, 1 to 48.
+--   cols          DataBar Expanded Stacked columns per row, 1 to 11.
+--                 Data Matrix also reads it as the symbol size, and it is
+--                 applied after vers, so it wins when both are set.
+--   rows          DataBar Expanded Stacked maximum rows, 2 to 11.
+--                 An in-range value is ignored for every other symbol.
 --   reverse       white on black
 --   init          reader initialisation (programming) symbol
 --   esc           process escape sequences in the data
@@ -62,11 +66,20 @@
 --   zint/vector.lua   backend/vector.c   bitmap -> rectangles and strings
 --   zint/svg.lua      backend/svg.c      rectangles and strings -> SVG text
 --   zint/code.lua     backend/code.c     Code 39
---   zint/code128.lua  backend/code128.c  Code 128, GS1-128, NVE-18
---   zint/upcean.lua   backend/upcean.c   UPC-A, UPC-E, EAN-8, EAN-13
+--   zint/code128.lua  backend/code128.c  Code 128, GS1-128, NVE-18,
+--                                      Code 128 suppress C
+--   zint/flat.lua     backend/postal.c   Flattermarken only
+--   zint/pdf417.lua   backend/pdf417.c   PDF417 and Compact PDF417
+--   zint/maxicode.lua backend/maxicode.c MaxiCode
+--   zint/aztec.lua    backend/aztec.c    Aztec
+--   zint/imail.lua    backend/imail.c    USPS Intelligent Mail
+--   zint/large.lua    backend/large.c    128-bit arithmetic for Intelligent Mail
+--   zint/upcean.lua   backend/upcean.c   UPC-A, UPC-E, EAN-8, EAN-13, ISBN,
+--                                      EAN-2, EAN-5
 --   zint/c25inter.lua backend/2of5inter.c  Interleaved 2 of 5, ITF-14
 --   zint/dbar.lua     backend/rss.c      GS1 DataBar Expanded, Expanded Stacked,
 --                                      Omnidirectional, Stacked Omnidirectional
+--   zint/dmatrix.lua  backend/dmatrix.c  Data Matrix ECC 200
 --   zint/gs1.lua      backend/gs1.c      GS1 AI parsing and input reduction
 --   zint/eci.lua      backend/eci.c      UTF-8 to ISO 8859-1
 --   zint/options.lua  (this repo)        option parsing, from the manual and the CLI
@@ -86,9 +99,15 @@ local vector  = require "zint.vector"
 local svg     = require "zint.svg"
 local code    = require "zint.code"
 local code128 = require "zint.code128"
+local flat    = require "zint.flat"
+local pdf417  = require "zint.pdf417"
+local maxicode = require "zint.maxicode"
+local aztec   = require "zint.aztec"
+local imail   = require "zint.imail"
 local upcean  = require "zint.upcean"
 local c25inter = require "zint.c25inter"
 local dbar    = require "zint.dbar"
+local dmatrix = require "zint.dmatrix"
 local qr      = require "zint.qr"
 local gs1     = require "zint.gs1"
 
@@ -101,14 +120,25 @@ local gs1     = require "zint.gs1"
 local BARCODE_C25INTER  = 3
 local BARCODE_CODE39    = 8
 local BARCODE_EAN8      = 10
+local BARCODE_EAN2      = 11
+local BARCODE_EAN5      = 12
 local BARCODE_EAN13     = 15
 local BARCODE_GS1_128   = 16
 local BARCODE_CODE128   = 20
+local BARCODE_FLAT      = 28
+local BARCODE_CODE128AB = 60
 local BARCODE_UPCA      = 34
 local BARCODE_UPCA_CHK  = 35
 local BARCODE_UPCE      = 37
 local BARCODE_UPCE_CHK  = 38
+local BARCODE_PDF417    = 55
+local BARCODE_PDF417COMP = 56
+local BARCODE_MAXICODE  = 57
 local BARCODE_QRCODE    = 58
+local BARCODE_USPS_IMAIL = 85
+local BARCODE_AZTEC     = 92
+local BARCODE_ISBNX     = 69
+local BARCODE_DATAMATRIX = 71
 local BARCODE_DBAR_OMN  = 29
 local BARCODE_DBAR_EXP  = 31
 local BARCODE_NVE18     = 75
@@ -157,15 +187,32 @@ local NAMES = {
   rssexpstack = BARCODE_DBAR_EXPSTK,
   code39   = BARCODE_CODE39,
   ean8     = BARCODE_EAN8,
+  ean2     = BARCODE_EAN2,
+  ean2addon = BARCODE_EAN2,
+  ean5     = BARCODE_EAN5,
+  ean5addon = BARCODE_EAN5,
   ean13    = BARCODE_EAN13,
+  isbn     = BARCODE_ISBNX,
+  isbnx    = BARCODE_ISBNX,
   gs1128   = BARCODE_GS1_128,
   ean128   = BARCODE_GS1_128, -- synonym, as in main.c
   code128  = BARCODE_CODE128,
+  code128ab = BARCODE_CODE128AB,
+  code128b = BARCODE_CODE128AB, -- synonym, as in main.c
+  flat     = BARCODE_FLAT,
   upca     = BARCODE_UPCA,
   upcachk  = BARCODE_UPCA_CHK,
   upce     = BARCODE_UPCE,
   upcechk  = BARCODE_UPCE_CHK,
   qrcode   = BARCODE_QRCODE,
+  datamatrix = BARCODE_DATAMATRIX,
+  pdf417   = BARCODE_PDF417,
+  pdf417comp = BARCODE_PDF417COMP,
+  pdf417trunc = BARCODE_PDF417COMP, -- synonym, as in main.c
+  maxicode = BARCODE_MAXICODE,
+  uspsimail = BARCODE_USPS_IMAIL,
+  aztec    = BARCODE_AZTEC,
+  azteccode = BARCODE_AZTEC, -- synonym, as in main.c
 }
 
 local function symbology_number(barcode)
@@ -184,6 +231,10 @@ local ENCODERS = {
   [BARCODE_ITF14]    = c25inter.itf14,
   [BARCODE_CODE39]  = code.code39,
   [BARCODE_CODE128] = code128.code128,
+  -- Same encoder. Symbology 60 never selects code set C.
+  [BARCODE_CODE128AB] = code128.code128,
+  -- Flattermarken. Digits only, no human-readable line.
+  [BARCODE_FLAT] = flat.flat,
   -- NVE-18 is an SSCC. It builds a GS1-128 "(00)" string itself, so the
   -- driver must not reduce the caller's digits first.
   [BARCODE_NVE18] = code128.nve18,
@@ -206,6 +257,11 @@ local ENCODERS = {
   -- EAN-13 is one id for both shapes. Twelve digits grow a check digit;
   -- thirteen must already include the right one. There is no EAN13_CHK.
   [BARCODE_EAN13]    = upcean.ean13,
+  -- Standalone magazine add-ons. They draw the add-on with no body.
+  [BARCODE_EAN2]     = upcean.ean2,
+  [BARCODE_EAN5]     = upcean.ean5,
+  -- ISBN is an EAN-13 whose input is an ISBN-10, an SBN, or an ISBN-13.
+  [BARCODE_ISBNX]    = upcean.isbn,
   -- EAN-8, same shape as EAN-13: seven digits grow a check, eight must match.
   [BARCODE_EAN8]     = upcean.ean8,
   -- 37 computes the check from six digits (or seven, with a number system).
@@ -224,6 +280,22 @@ local ENCODERS = {
   -- the driver refuses --gs1 and does not reduce the input first.
   [BARCODE_DBAR_OMN] = dbar.omn,
   [BARCODE_DBAR_OMNSTK] = dbar.omn,
+  -- Data Matrix is gs1-compliant and not force-gs1, so the driver reduces
+  -- the element string first. The encoder prefixes FNC1 itself.
+  [BARCODE_DATAMATRIX] = dmatrix.datamatrix,
+  -- PDF417 and Compact PDF417 share one encoder. Symbology 56 drops the
+  -- right row indicator and the full stop pattern.
+  [BARCODE_PDF417] = pdf417.pdf417,
+  [BARCODE_PDF417COMP] = pdf417.pdf417,
+  -- MaxiCode reads symbol.primary. Modes 2 and 3 are structured; 4, 5, and
+  -- 6 are the message alone.
+  [BARCODE_MAXICODE] = maxicode.maxicode,
+  -- Aztec is gs1-compliant and not force-gs1, so the driver reduces an
+  -- element string before the encoder runs.
+  [BARCODE_AZTEC] = aztec.aztec,
+  -- Intelligent Mail is a tracking code plus an optional ZIP. It is not
+  -- GS1 and it does not take an ECI.
+  [BARCODE_USPS_IMAIL] = imail.imail,
 }
 
 -- backend/library.c `check_force_gs1()`. These are in GS1 mode whether or not
@@ -236,31 +308,40 @@ local FORCE_GS1 = {
   [BARCODE_DBAR_EXPSTK] = true,
 }
 
--- backend/common.c `is_dotty()`. Dotty mode is a matrix-symbology feature: the
--- C's list is fifteen 2D symbologies long and contains no linear ones at all,
--- so of the five here only QR qualifies. --dotty on any of the other four is an
--- error rather than a no-op, which is worth knowing before wondering why a
--- dotted Code 128 never appears.
+-- backend/common.c `is_dotty()`. Dotty mode is a matrix-symbology feature.
+-- QR, Data Matrix, and Aztec draw as dots. MaxiCode does not: its plot is
+-- hexagons. --dotty on anything else is an error rather than a no-op.
 local IS_DOTTY = {
   [BARCODE_QRCODE] = true,
+  [BARCODE_DATAMATRIX] = true,
+  [BARCODE_AZTEC] = true,
 }
 
 -- backend/library.c `gs1_compliant()` unioned with `check_force_gs1()`, cut
--- down to the five here. --gs1 on anything not in this table is an error, not a
--- no-op, so Code 39, Code 128 and UPC-A all refuse it.
+-- down to the ones here. --gs1 on anything not in this table is an error, not a
+-- no-op, so Code 39, Code 128, PDF417, MaxiCode, and Intelligent Mail refuse it.
 local GS1_COMPLIANT = {
   [BARCODE_GS1_128] = true,
   [BARCODE_NVE18] = true,
   [BARCODE_DBAR_EXP] = true,
   [BARCODE_DBAR_EXPSTK] = true,
   [BARCODE_QRCODE]  = true,
+  [BARCODE_DATAMATRIX] = true,
+  [BARCODE_AZTEC] = true,
 }
 
--- backend/library.c `supports_eci()`, same treatment. It words the empty-input
--- message, and it is the list that decides whether a failed character-set
--- conversion is retried under another ECI. Of the five symbologies, only QR.
+-- backend/library.c `supports_eci()`. It words the empty-input message, and it
+-- is the list that decides whether a failed character-set conversion is
+-- retried under another ECI. QR handles its own charset. The others do
+-- not: Latin-1 is folded first, and an ECI is set only when that fold fails.
+-- Intelligent Mail is not on this list.
 local SUPPORTS_ECI = {
   [BARCODE_QRCODE] = true,
+  [BARCODE_DATAMATRIX] = true,
+  [BARCODE_PDF417] = true,
+  [BARCODE_PDF417COMP] = true,
+  [BARCODE_MAXICODE] = true,
+  [BARCODE_AZTEC] = true,
 }
 
 -- backend/library.c `extended_or_reduced_charset()`. The symbologies listed
@@ -421,13 +502,36 @@ function zint.barcode(opts)
   -- ISO 8859-1, so `é` reaches the encoder as one byte rather than the two it
   -- was typed as. Getting this wrong is not a rounding error: it encodes a
   -- different number of characters and produces a different symbol.
+  -- Data Matrix is not on the elite charset list, so Latin-1 is tried
+  -- first and the encoder sees the folded bytes. When that fold fails and
+  -- the symbology supports ECI, pick the lowest single-byte ECI (or 26,
+  -- raw UTF-8) and convert before the encoder runs. QR never reaches this
+  -- arm: it handles its own charset and retries on 800/242/240 below.
+  local pending_eci_warning
   if (symbol.input_mode & 0x07) == common.UNICODE_MODE
       and not HANDLES_OWN_CHARSET[symbology] then
     local converted = eci.utf8_to_latin1(source)
-    if not converted then
+    if converted then
+      source = converted
+    elseif SUPPORTS_ECI[symbology] and (symbol.eci or 0) == 0 then
+      local best = eci.get_best_eci(source)
+      local reported = 0
+      if best ~= 3 then
+        symbol.eci = best
+        reported = best
+      end
+      if eci.is_eci_convertible(best) then
+        converted = eci.utf8_to_eci(best, source)
+        if not converted then
+          return nil, "Error 204: Invalid character in input data (ISO/IEC 8859-1 only)"
+        end
+        source = converted
+      end
+      pending_eci_warning = string.format(
+        "Warning 222: Encoded data includes ECI %d", reported)
+    else
       return nil, "Error 204: Invalid character in input data (ISO/IEC 8859-1 only)"
     end
-    source = converted
   end
 
   local ok, err = encode(symbol, source, opts)
@@ -456,6 +560,10 @@ function zint.barcode(opts)
     if ok then
       symbol.warning = string.format("Warning 222: Encoded data includes ECI %d", reported)
     end
+  end
+  -- The C overwrites any other warning with 222 once the ECI retry sticks.
+  if ok and pending_eci_warning then
+    symbol.warning = pending_eci_warning
   end
   if not ok then return nil, err end
 

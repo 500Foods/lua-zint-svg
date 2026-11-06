@@ -158,15 +158,16 @@ end
 -- EAN-13's text is 13 characters with no add-on and a UPC-A's is 12, so a
 -- shared "longer than 12" test would steal the right quiet zone.
 --
--- Of the C's list, EAN-8 (10) and EAN-13 (15) are encoded. The standalone
--- add-ons, ISBN, and the legacy EANX ids are not, yet.
+-- Encoded: EAN-8 (10), EAN-2 (11), EAN-5 (12), EAN-13 (15), ISBN (69).
+-- The legacy EANX ids are not.
 function M.is_ean(symbology)
-  return symbology == 10 or symbology == 15
+  return symbology == 10 or symbology == 11 or symbology == 12
+      or symbology == 15 or symbology == 69
 end
 
 -- backend/common.c `is_upcean()`. The C lists the EAN, UPC and ISBN variants
--- plus their composite forms. Encoded here: EAN-8 (10), EAN-13 (15), UPC-A
--- (34 and 35), and UPC-E (37 and 38).
+-- plus their composite forms. Encoded here: EAN-8 (10), EAN-2 (11), EAN-5
+-- (12), EAN-13 (15), UPC-A (34 and 35), UPC-E (37 and 38), and ISBN (69).
 --
 -- Four files branch on this predicate and they must agree: output.lua sizes
 -- the quiet zones for the outside digits, vector.lua splits the text and hangs
@@ -406,6 +407,7 @@ function M.new_symbol()
     row_height = {},      -- 0-based
     encoded = {},         -- 0-based rows of 0-based module flags
     text = "",            -- human readable line, set by the encoder
+    primary = "",         -- MaxiCode structured primary, 127 characters
     -- The C's `errtxt` in its warning role. An encoder that finishes but has
     -- something to say leaves it here and the driver prints it once, after
     -- encoding, which is where main.c prints it too. Errors do not come through

@@ -186,16 +186,16 @@ Tests come in two layers.
 
 ## Backlog
 
-Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in this tree: Interleaved 2 of 5 (3), Code 39 (8), EAN-8 (10), EAN-13 (15), GS1-128 (16), Code 128 (20), GS1 DataBar Omnidirectional (29), GS1 DataBar Expanded (31), UPC-A (34), UPC-A with check digit (35), UPC-E (37), UPC-E with check digit (38), QR Code (58), NVE-18 (75), GS1 DataBar Stacked Omnidirectional (80), GS1 DataBar Expanded Stacked (81), ITF-14 (89).
+Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in this tree: Interleaved 2 of 5 (3), Code 39 (8), EAN-8 (10), EAN-2 add-on (11), EAN-5 add-on (12), EAN-13 (15), GS1-128 (16), Code 128 (20), Flattermarken (28), GS1 DataBar Omnidirectional (29), GS1 DataBar Expanded (31), UPC-A (34), UPC-A with check digit (35), UPC-E (37), UPC-E with check digit (38), PDF417 (55), Compact PDF417 (56), MaxiCode (57), QR Code (58), Code 128 (Suppress Code Set C) (60), ISBN (69), Data Matrix (71), NVE-18 (75), GS1 DataBar Stacked Omnidirectional (80), GS1 DataBar Expanded Stacked (81), USPS Intelligent Mail (85), ITF-14 (89), Aztec (92).
 
 Not yet, by id:
 
-- Linear and retail: Code 11 (1), Code 2 of 5 Standard (2), IATA (4), Data Logic (6), Industrial (7), Extended Code 39 (9), EAN-2 add-on (11), EAN-5 add-on (12), EANX (13), EANX check (14), Codabar (18), DP Leitcode (21), DP Identcode (22), Code 93 (25), Flattermarken (28), Telepen (32), MSI Plessey (47), LOGMARS (50), PZN (52), VIN (73), Code 128 suppress C (60), UK Plessey (86), Telepen Numeric (87), Code 32 (129), Channel Code (140), BC412 (146), DX Film Edge (147).
+- Linear and retail: Code 11 (1), Code 2 of 5 Standard (2), IATA (4), Data Logic (6), Industrial (7), Extended Code 39 (9), EANX (13), EANX check (14), Codabar (18), DP Leitcode (21), DP Identcode (22), Code 93 (25), Telepen (32), MSI Plessey (47), LOGMARS (50), PZN (52), VIN (73), UK Plessey (86), Telepen Numeric (87), Code 32 (129), Channel Code (140), BC412 (146), DX Film Edge (147).
 - GS1 DataBar: Limited (30), Stacked (79).
-- Matrix: Data Matrix (71), Aztec (92), MaxiCode (57), Micro QR (97), Han Xin (116), DotCode (115), Grid Matrix (142), Ultracode (144), rMQR (145), UPNQR (143), Aztec Rune (128), Code One (141).
-- Stacked: Code 16k (23), Code 49 (24), PDF417 (55), Compact PDF417 (56), MicroPDF417 (84), Codablock-F (74).
-- Postal: POSTNET (40), PLANET (82), Australia Post (63), Reply Paid (66), Routing (67), Redirection (68), RM4SCC (70), Japan Post (76), Korea Post (77), KIX (90), USPS Intelligent Mail (85), CEPNet (54), Royal Mail 2D Mailmark (119), Mailmark 4-state (121), UPU S10 (120), FIM (49).
-- Pharma and HIBC: Pharmacode One-Track (51), Two-Track (53), EAN-14 (72), ISBN (69), HIBC Code 128 (98), Code 39 (99), Data Matrix (102), QR (104), PDF417 (106), MicroPDF417 (108), Codablock-F (110), Aztec (112), DAFT (93), DPD (96).
+- Matrix: Micro QR (97), Han Xin (116), DotCode (115), Grid Matrix (142), Ultracode (144), rMQR (145), UPNQR (143), Aztec Rune (128), Code One (141).
+- Stacked: Code 16k (23), Code 49 (24), MicroPDF417 (84), Codablock-F (74).
+- Postal: POSTNET (40), PLANET (82), Australia Post (63), Reply Paid (66), Routing (67), Redirection (68), RM4SCC (70), Japan Post (76), Korea Post (77), KIX (90), CEPNet (54), Royal Mail 2D Mailmark (119), Mailmark 4-state (121), UPU S10 (120), FIM (49).
+- Pharma and HIBC: Pharmacode One-Track (51), Two-Track (53), EAN-14 (72), HIBC Code 128 (98), Code 39 (99), Data Matrix (102), QR (104), PDF417 (106), MicroPDF417 (108), Codablock-F (110), Aztec (112), DAFT (93), DPD (96).
 - Composites: EANX (130), GS1-128 (131), DataBar Omnidirectional (132), Limited (133), Expanded (134), UPC-A (135), UPC-E (136), DataBar Stacked (137), Stacked Omnidirectional (138), Expanded Stacked (139), EAN-8 (148), EAN-13 (149).
 
 Also waiting, and not part of the first rock:

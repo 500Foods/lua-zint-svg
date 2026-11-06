@@ -258,11 +258,26 @@ local function quiet_zones(symbol, hide_text)
     left, right = 10.0, 10.0
   elseif symbol.symbology == 16 then  -- GS1-128: GS1 Gen Specs 21.0.1 5.4.4.2
     left, right = 10.0, 10.0
-  elseif symbol.symbology == 20 or symbol.symbology == 75 then
-    -- CODE128 and NVE-18: ISO/IEC 15417:2007 4.4.2
+  elseif symbol.symbology == 20 or symbol.symbology == 60 or symbol.symbology == 75 then
+    -- CODE128, CODE128AB, and NVE-18: ISO/IEC 15417:2007 4.4.2
     left, right = 10.0, 10.0
   elseif symbol.symbology == 58 then  -- QRCODE: ISO/IEC 18004:2015 Section 9.1
     left, right, top, bottom = 4.0, 4.0, 4.0, 4.0
+  elseif symbol.symbology == 71 then  -- DATAMATRIX: ISO/IEC 16022:2006 7.1, 1X
+    left, right, top, bottom = 1.0, 1.0, 1.0, 1.0
+  elseif symbol.symbology == 55 or symbol.symbology == 56 then
+    -- PDF417 and Compact PDF417: ISO/IEC 15438:2015 5.8.3
+    left, right, top, bottom = 2.0, 2.0, 2.0, 2.0
+  elseif symbol.symbology == 57 then  -- MAXICODE: ISO/IEC 16023:2000 4.11.5
+    left, right, top, bottom = 1.0, 1.0, 1.0, 1.0
+  elseif symbol.symbology == 85 then
+    -- USPS Intelligent Mail: USPS-B-3200 2.3.2, X max = 1/39
+    left = common.stripf(4.875)
+    right = left
+    top = common.stripf(1.01400006)
+    bottom = top
+    -- Aztec (92) specifies no quiet zone even with --quietzones, so it is
+    -- absent here and stays at zero.
   end
 
   return left, right, top, bottom
@@ -314,8 +329,8 @@ end
 --
 -- The "flag" is the digit count of the family member -- 12 for UPC-A, 13 for
 -- EAN-13, 6 for UPC-E and so on -- and vector.c branches on it numerically
--- (`>= 6` means "a real symbol rather than a standalone add-on"). 6, 8, 12,
--- and 13 are reachable here.
+-- (`>= 6` means "a real symbol rather than a standalone add-on"). 2, 5, 6,
+-- 8, 12, and 13 are reachable here. 2 and 5 are the standalone add-ons.
 --
 -- Note the add-on is scraped back out of the human-readable text rather than
 -- passed down from the encoder, and the scan starts at offset 6 because no

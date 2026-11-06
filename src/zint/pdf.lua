@@ -11,7 +11,9 @@
 -- carries the raw TrueType bytes for that face: OCR-B for UPC and EAN,
 -- Arimo otherwise. The writer embeds them. This file does not assign object
 -- numbers, build a FontFile2, compress, or subset.
--- Circles (dotty mode) are four cubic beziers.
+-- Circles (dotty mode) are four cubic beziers. A circle with a width is a
+-- stroked ring, which is how MaxiCode draws its bullseye. Hexagons are
+-- filled polygons, one per MaxiCode module.
 
 local common = require "zint.common"
 
@@ -36,7 +38,7 @@ end
 -- One circle as a closed cubic. kappa is the standard 4*(sqrt(2)-1)/3.
 local KAPPA = f32(0.5522847498)
 
-local function circle_ops(out, cx, cy, r)
+local function circle_ops(out, cx, cy, r, stroke)
   local k = f32(KAPPA * r)
   out[#out + 1] = num(cx - r) .. " " .. num(cy) .. " m\n"
   out[#out + 1] = num(cx - r) .. " " .. num(cy + k) .. " "
@@ -51,7 +53,35 @@ local function circle_ops(out, cx, cy, r)
   out[#out + 1] = num(cx - k) .. " " .. num(cy - r) .. " "
     .. num(cx - r) .. " " .. num(cy - k) .. " "
     .. num(cx - r) .. " " .. num(cy) .. " c\n"
-  out[#out + 1] = "h\nf\n"
+  out[#out + 1] = stroke and "h\nS\n" or "h\nf\n"
+end
+
+-- Point-up when rotation is 0 or 180, flat-top otherwise. Y is still
+-- SVG-down here; the caller flips it.
+local function hex_verts(hex)
+  local d = hex.diameter
+  local radius = f32(0.5 * d)
+  local half_radius = f32(0.25 * d)
+  local half_sqrt3 = f32(f32(0.43301270189221932338) * d)
+  local x, y = hex.x, hex.y
+  if hex.rotation == 0 or hex.rotation == 180 then
+    return {
+      { x, f32(y + radius) },
+      { f32(x + half_sqrt3), f32(y + half_radius) },
+      { f32(x + half_sqrt3), f32(y - half_radius) },
+      { x, f32(y - radius) },
+      { f32(x - half_sqrt3), f32(y - half_radius) },
+      { f32(x - half_sqrt3), f32(y + half_radius) },
+    }
+  end
+  return {
+    { f32(x - radius), y },
+    { f32(x - half_radius), f32(y + half_sqrt3) },
+    { f32(x + half_radius), f32(y + half_sqrt3) },
+    { f32(x + radius), y },
+    { f32(x + half_radius), f32(y - half_sqrt3) },
+    { f32(x - half_radius), f32(y - half_sqrt3) },
+  }
 end
 
 local function text_matrix(rotation, x, y)
@@ -77,10 +107,24 @@ function M.form(symbol)
       .. num(rect.width) .. " " .. num(rect.height) .. " re\nf\n"
   end
 
+  for _, hex in ipairs(vector.hexagons or {}) do
+    local verts = hex_verts(hex)
+    for i, p in ipairs(verts) do
+      local y = flip_y(height, p[2], 0)
+      out[#out + 1] = num(p[1]) .. " " .. num(y) .. (i == 1 and " m\n" or " l\n")
+    end
+    out[#out + 1] = "h\nf\n"
+  end
+
   for _, circle in ipairs(vector.circles) do
     local r = f32(0.5 * circle.diameter)
     local cy = flip_y(height, circle.y, 0)
-    circle_ops(out, circle.x, cy, r)
+    if (circle.width or 0) ~= 0 then
+      out[#out + 1] = num(circle.width) .. " w\n"
+      circle_ops(out, circle.x, cy, r, true)
+    else
+      circle_ops(out, circle.x, cy, r, false)
+    end
   end
 
   for _, str in ipairs(vector.strings) do

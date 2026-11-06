@@ -20,6 +20,7 @@ local BOOLEAN = {
   noquietzones = true, bind = true, bindtop = true, box = true,
   notext = true, small = true, bold = true, embedfont = true,
   dotty = true, esc = true, extraesc = true, init = true,
+  fast = true, square = true, dmre = true, dmiso144 = true, gssep = true,
 }
 
 local SHORT = {

@@ -35,6 +35,17 @@ local cases = {
   { file = "dbarexpstk.svg", barcode = 81, data = "[01]09501101530003[17]140704[10]AB-123" },
   { file = "dbaromn.svg", barcode = 29, data = "09501101530003" },
   { file = "dbaromnstk.svg", barcode = 80, data = "09501101530003" },
+  { file = "dmatrix.svg", barcode = 71, data = "HELLO" },
+  { file = "ean2.svg",     barcode = 11, data = "05" },
+  { file = "ean5.svg",     barcode = 12, data = "12345" },
+  { file = "isbn.svg",     barcode = 69, data = "9780306406157" },
+  { file = "code128ab.svg", barcode = 60, data = "123456" },
+  { file = "flat.svg",     barcode = 28, data = "0123456789" },
+  { file = "pdf417.svg",   barcode = 55, data = "PDF417" },
+  { file = "pdf417comp.svg", barcode = 56, data = "Hello" },
+  { file = "maxicode.svg", barcode = 57, data = "1" },
+  { file = "imail.svg",    barcode = 85, data = "01234567094987654321-01234567891" },
+  { file = "aztec.svg",    barcode = 92, data = "Hello" },
 }
 
 local failed = 0

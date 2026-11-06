@@ -58,6 +58,14 @@ local function add_circle(vector, x, y, diameter, width, colour)
   }
 end
 
+-- backend/vector.c `vector_add_hexagon()`. MaxiCode only. Rotation starts at
+-- 0 (point up) and is set by rotate_vector.
+local function add_hexagon(vector, x, y, diameter)
+  vector.hexagons[#vector.hexagons + 1] = {
+    x = x, y = y, diameter = diameter, rotation = 0,
+  }
+end
+
 -- --------------------------------------------------------------- scale/merge
 
 -- backend/vector.c `vector_reduce_rectangles()` -- merge vertically adjacent
@@ -117,6 +125,12 @@ local function scale_vector(symbol, vector)
     rect.width = f32(rect.width * scale)
   end
 
+  for _, hex in ipairs(vector.hexagons) do
+    hex.x = f32(hex.x * scale)
+    hex.y = f32(hex.y * scale)
+    hex.diameter = f32(hex.diameter * scale)
+  end
+
   for _, circle in ipairs(vector.circles) do
     circle.x = f32(circle.x * scale)
     circle.y = f32(circle.y * scale)
@@ -169,6 +183,24 @@ local function rotate_vector(vector, rotate_angle)
     end
   end
 
+  for _, hex in ipairs(vector.hexagons) do
+    if rotate_angle == 90 then
+      local temp = hex.x
+      hex.x = f32(vector.height - hex.y)
+      hex.y = temp
+      hex.rotation = 90
+    elseif rotate_angle == 180 then
+      hex.x = f32(vector.width - hex.x)
+      hex.y = f32(vector.height - hex.y)
+      hex.rotation = 180
+    elseif rotate_angle == 270 then
+      local temp = hex.x
+      hex.x = hex.y
+      hex.y = f32(vector.width - temp)
+      hex.rotation = 270
+    end
+  end
+
   for _, circle in ipairs(vector.circles) do
     if rotate_angle == 90 then
       local temp = circle.x
@@ -210,16 +242,19 @@ end
 -- ------------------------------------------------------------- plot_vector
 
 -- backend/vector.c `plot_vector()`, restricted to the branches this port can
--- reach. No Maxicode (hexagons and a bullseye), no Ultracode (coloured
--- rectangles), no composite symbols, no stacked-symbol separators -- none of
--- those symbologies are encoded here, so their geometry would be untested code.
+-- reach. No Ultracode (coloured rectangles), no composite symbols. MaxiCode
+-- is the hexagon branch: a bullseye of three rings and one hexagon per
+-- set module. Aztec and PDF417 use the generic rectangle path.
 --
 -- The remaining shape is: work out the bounding box, walk the bitmap turning
 -- runs of set modules into rectangles (or dots), place the text, draw any
 -- border, then merge, scale and rotate.
 function M.plot(symbol, rotate_angle)
   rotate_angle = rotate_angle or 0
-  local vector = { width = 0.0, height = 0.0, rectangles = {}, circles = {}, strings = {} }
+  local vector = {
+    width = 0.0, height = 0.0,
+    rectangles = {}, hexagons = {}, circles = {}, strings = {},
+  }
   symbol.vector = vector
 
   local opts = symbol.output_options
@@ -357,7 +392,47 @@ function M.plot(symbol, rotate_angle)
   -- that is where the add-on's own row geometry is worked out.
   local addon_text_yposn = 0.0
 
-  if (opts & common.BARCODE_DOTTY_MODE) ~= 0 then
+  if symbol.symbology == 57 then
+    -- backend/vector.c, the MaxiCode arm. It replaces the width and height
+    -- just computed: the grid is fixed, and the bullseye is not a module.
+    -- `1.1547` is 2/√3 and `0.866` is √3/2, both already the C's float
+    -- literals rather than a freshly computed root.
+    local two_div_sqrt3 = f32(1.1547)
+    local sqrt3_div_two = f32(0.866)
+    local hex_diameter = f32(1.0)
+    local hex_radius = f32(hex_diameter / 2.0)
+    local hex_ydiameter = f32(two_div_sqrt3 * hex_diameter)
+    local hex_yradius = f32(hex_ydiameter / 2.0)
+    local yposn_offset = f32(sqrt3_div_two * hex_diameter)
+
+    vector.width = f32(f32(30 * hex_diameter) + f32(xoffset + roffset))
+    vector.height = f32(f32(f32(32 * yposn_offset) + hex_ydiameter)
+      + f32(yoffset + boffset))
+
+    local bull_x = f32(f32(f32(14.5) * hex_diameter) + xoffset)
+    local bull_y = f32(vector.height / 2.0)
+    local bull_d_incr = f32(f32(f32(hex_diameter * 9.0) - hex_ydiameter) / 5.0)
+    local bull_width = f32(bull_d_incr / 2.0)
+    local function bull_d(n)
+      return f32(f32(hex_ydiameter + f32(bull_d_incr * n)) - bull_width)
+    end
+    add_circle(vector, bull_x, bull_y, bull_d(5), bull_width, 0)
+    add_circle(vector, bull_x, bull_y, bull_d(3), bull_width, 0)
+    add_circle(vector, bull_x, bull_y, bull_d(1), bull_width, 0)
+
+    for r = 0, symbol.rows - 1 do
+      local odd_row = r & 1
+      local hex_yposn = f32(f32(f32(r * yposn_offset) + hex_yradius) + yoffset)
+      local xposn_offset = f32((odd_row ~= 0 and hex_diameter or hex_radius) + xoffset)
+      for i = 0, symbol.width - odd_row - 1 do
+        if module_is_set(symbol, r, i) == 1 then
+          add_hexagon(vector, f32(f32(i * hex_diameter) + xposn_offset),
+                      hex_yposn, hex_diameter)
+        end
+      end
+    end
+
+  elseif (opts & common.BARCODE_DOTTY_MODE) ~= 0 then
     -- One circle per set module, no run merging -- dots do not join up the way
     -- rectangles do. Note the C puts this branch *before* the UPC/EAN one, so a
     -- dotty UPC-A would come out here rather than with guard bars -- except
@@ -437,9 +512,12 @@ function M.plot(symbol, rotate_angle)
     -- rectangle, so a wide bar is one rect rather than several. Unset runs are
     -- measured too, and skipped: the measuring is what advances i past them.
     --
-    -- The C also lifts yposn here for a standalone EAN-2/EAN-5, whose text goes
-    -- above the bars. No symbology in this port produces one.
+    -- A standalone EAN-2 or EAN-5 prints its digits above the bars, so the
+    -- bars start below that line. A symbol with a body took the branch above.
     local yposn = yoffset
+    if upceanflag ~= 0 and not hide_text then
+      yposn = f32(f32(f32(yposn + font_height) + text_gap) + antialias_fudge)
+    end
     for r = 0, symbol.rows - 1 do
       local rh = symbol.row_height[r] or 0.0
       local row_height = rh ~= 0 and rh or large_bar_height
@@ -682,14 +760,29 @@ function M.plot(symbol, rotate_angle)
       -- UPC symbol, because the check digit is already occupying that space.
       end
 
+    elseif upceanflag ~= 0 then
+      -- Standalone EAN-2 / EAN-5. The digits sit above the bars, centred on
+      -- the symbol. A bottom border is already excluded: the test includes
+      -- --bindtop, which the body symbols do not.
+      local text_xposn = f32(main_width / 2.0 + xoffset)
+      local text_yposn = f32(f32(yoffset + font_height) - digit_ascender)
+      if symbol.border_width > 0
+          and (opts & (common.BARCODE_BOX | common.BARCODE_BIND | common.BARCODE_BIND_TOP)) ~= 0 then
+        text_yposn = f32(text_yposn - symbol.border_width)
+      end
+      if text_yposn < 0.0 then text_yposn = 0.0 end
+      add_string(vector, symbol.text, text_xposn, text_yposn, font_height,
+                 f32(#symbol.text * 8.5), 0)
+      if upcean_guard_whitespace then
+        add_string(vector, ">",
+                   f32(f32(f32(symbol.width + gws_right_fudge) + qz_right) + xoffset),
+                   text_yposn, font_height, f32(8.5), 2)
+      end
+
     else
       -- Everything else: one centred string under the symbol. Worked out as the
       -- bottom edge of the text box, then lifted by the font's descent -- SVG's
       -- y on a <text> is the baseline, not the bottom.
-      --
-      -- The C's third branch, `else if (upceanflag)`, puts a standalone EAN-2 or
-      -- EAN-5's text above its bars. Unreachable: no add-on can be encoded here
-      -- without a body in front of it.
       local text_xposn = f32(f32(main_width / 2.0) + xoffset_comp)
       local text_yposn = f32(f32(f32(yoffset + symbol.height) + font_height) + text_gap)
       text_yposn = f32(text_yposn - (small_text and descent_small or descent))
@@ -707,7 +800,7 @@ function M.plot(symbol, rotate_angle)
   -- code has no text line under it to stay clear of.
   if symbol.border_width > 0
       and (opts & (common.BARCODE_BOX | common.BARCODE_BIND | common.BARCODE_BIND_TOP)) ~= 0 then
-    local horz_outside = (symbol.symbology == 58) -- is_fixed_ratio: QR of ours
+    local horz_outside = symbol.symbology == 58 or symbol.symbology == 71
     local ybind_top = f32(yoffset - symbol.border_width)
     -- Equivalent to yoffset + symbol.height + dot_overspill, but computed from
     -- the far edge the way the C does so the rounding matches.
@@ -715,10 +808,12 @@ function M.plot(symbol, rotate_angle)
     if horz_outside then
       ybind_top = 0.0
       ybind_bot = f32(vector.height - symbol.border_width)
+    elseif upceanflag == 2 or upceanflag == 5 then
+      -- The add-on's text is above the bars, so the box follows the bars
+      -- down by the same textoffset the bitmap scan added.
+      ybind_top = f32(ybind_top + textoffset)
+      ybind_bot = f32(ybind_bot + textoffset)
     end
-    -- The C has a third case here for EAN-2/EAN-5 standalone add-ons, whose
-    -- text sits above the bars rather than below; no symbology in this port
-    -- produces one.
 
     add_rect(vector, 0.0, ybind_top, vector.width, symbol.border_width)
     if (opts & common.BARCODE_BIND_TOP) == 0 then
@@ -733,6 +828,8 @@ function M.plot(symbol, rotate_angle)
       if horz_outside then
         box_top = symbol.border_width
         box_height = f32(vector.height - symbol.border_width * 2)
+      elseif upceanflag == 2 or upceanflag == 5 then
+        box_top = f32(box_top + textoffset)
       end
       add_rect(vector, 0.0, box_top, symbol.border_width, box_height)       -- left
       add_rect(vector, xbox_right, box_top, symbol.border_width, box_height) -- right

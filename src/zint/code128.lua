@@ -1,4 +1,4 @@
--- src/zint/code128.lua -- Code 128, GS1-128, and NVE-18.
+-- src/zint/code128.lua -- Code 128, GS1-128, NVE-18, and Code 128 suppress C.
 --
 -- The symbol characters are chosen by the divide-and-conquer encoder in
 -- zint 2.16 backend/code128.c (Alex Geller's minimal encoding, with the
@@ -274,7 +274,9 @@ local function set_priority(have_a, have_b, have_c, have_extended)
   return p
 end
 
-local function classify(source, length, fncs, manuals)
+-- `ab_only` is symbology 60 (Code 128 suppress C). Code set C stays unused,
+-- so a run of digits is encoded in set A or B.
+local function classify(source, length, fncs, manuals, ab_only)
   local have_a, have_b, have_c, have_extended = false, false, false, false
   local digit = false
   for i = 0, length - 1 do
@@ -285,9 +287,11 @@ local function classify(source, length, fncs, manuals)
       if (ch & 0x80) ~= 0 then have_extended = true end
       if mask == 0 or manual == A0 then have_a = true end
       if mask == 0x60 or manual == B0 then have_b = true end
-      local prev = digit
-      digit = is_digit(ch)
-      if prev and digit then have_c = true end
+      if not ab_only then
+        local prev = digit
+        digit = is_digit(ch)
+        if prev and digit then have_c = true end
+      end
     end
   end
   return have_a, have_b, have_c, have_extended
@@ -412,7 +416,8 @@ function M.code128(symbol, source)
     end
   end
 
-  local have_a, have_b, have_c, have_extended = classify(src, length, fncs, manuals)
+  local ab_only = symbol.symbology == 60
+  local have_a, have_b, have_c, have_extended = classify(src, length, fncs, manuals, ab_only)
   local priority = set_priority(have_a, have_b, have_c, have_extended)
   local start_idx = (symbol.output_options & common.READER_INIT) ~= 0 and 2 or 0
   local values, glyph_count = set_values(src, length, start_idx, priority, fncs, manuals)

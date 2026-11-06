@@ -171,11 +171,57 @@ function M.plot(symbol)
     w(put_opacity_close(fg_alpha, fg_alpha_opacity, true))
   end
 
-  -- Circles, which for this port means dotty mode -- one per set module. In
-  -- the C, Maxicode's bullseye comes through here too; that is the only thing
-  -- that ever sets a non-zero `width`, and the ring-drawing branch below with
-  -- it. The hexagon block that sits between the rectangles and here in svg.c is
-  -- Maxicode-only and has no counterpart.
+  -- Hexagons sit between the rectangles and the circles, which is where
+  -- svg.c emits them. MaxiCode is the only symbol that has any. One path,
+  -- filled by the group, with a Z between each hexagon and no extra space.
+  -- Rotation 0 and 180 are point-up; 90 and 270 are flat-top.
+  if #vector.hexagons > 0 then
+    local previous_diameter = 0.0
+    local radius, half_radius, half_sqrt3_radius = 0.0, 0.0, 0.0
+    local half_sqrt3 = common.stripf(0.43301270189221932338)
+    w('  <path d="')
+    for _, hex in ipairs(vector.hexagons) do
+      if previous_diameter ~= hex.diameter then
+        previous_diameter = hex.diameter
+        radius = common.stripf(0.5 * previous_diameter)
+        half_radius = common.stripf(0.25 * previous_diameter)
+        half_sqrt3_radius = common.stripf(half_sqrt3 * previous_diameter)
+      end
+      if hex.rotation == 0 or hex.rotation == 180 then
+        w(putsf("M", 2, hex.x))
+        w(putsf(" ", 2, common.stripf(hex.y + radius)))
+        w(putsf("L", 2, common.stripf(hex.x + half_sqrt3_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y + half_radius)))
+        w(putsf("L", 2, common.stripf(hex.x + half_sqrt3_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y - half_radius)))
+        w(putsf("L", 2, hex.x))
+        w(putsf(" ", 2, common.stripf(hex.y - radius)))
+        w(putsf("L", 2, common.stripf(hex.x - half_sqrt3_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y - half_radius)))
+        w(putsf("L", 2, common.stripf(hex.x - half_sqrt3_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y + half_radius)))
+      else
+        w(putsf("M", 2, common.stripf(hex.x - radius)))
+        w(putsf(" ", 2, hex.y))
+        w(putsf("L", 2, common.stripf(hex.x - half_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y + half_sqrt3_radius)))
+        w(putsf("L", 2, common.stripf(hex.x + half_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y + half_sqrt3_radius)))
+        w(putsf("L", 2, common.stripf(hex.x + radius)))
+        w(putsf(" ", 2, hex.y))
+        w(putsf("L", 2, common.stripf(hex.x + half_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y - half_sqrt3_radius)))
+        w(putsf("L", 2, common.stripf(hex.x - half_radius)))
+        w(putsf(" ", 2, common.stripf(hex.y - half_sqrt3_radius)))
+      end
+      w("Z")
+    end
+    w('"')
+    w(put_opacity_close(fg_alpha, fg_alpha_opacity, true))
+  end
+
+  -- Circles. Dotty mode is one disc per set module. MaxiCode's bullseye is
+  -- three rings, which is the only thing that sets a non-zero `width`.
   --
   -- `previous_diameter` is a one-entry cache: dotty mode gives every circle the
   -- same diameter, so the halving happens once no matter how many dots there

@@ -106,12 +106,25 @@ end
 local function default_xdim(symbology)
   -- GS1 retail X is 0.33mm: EAN, UPC, and DataBar. QR is the
   -- fixed-ratio default. Everything else is the GS1-128 application default.
-  if symbology == 10 or symbology == 15 or symbology == 29 or symbology == 31
+  if symbology == 10 or symbology == 11 or symbology == 12
+      or symbology == 15 or symbology == 29 or symbology == 31
       or symbology == 34 or symbology == 35 or symbology == 37
-      or symbology == 38 or symbology == 80 or symbology == 81 then
+      or symbology == 38 or symbology == 69 or symbology == 80
+      or symbology == 81 then
     return f32(0.33)
   end
-  if symbology == 58 then return f32(0.625) end
+  -- QR and Data Matrix are fixed-ratio, so the application default is
+  -- 0.625 rather than the linear 0.495. Aztec is fixed-ratio, so it
+  -- takes the same default.
+  if symbology == 58 or symbology == 71 or symbology == 92 then
+    return f32(0.625)
+  end
+  -- PDF417 and Compact PDF417 share the stacked-symbol 0.33mm default.
+  if symbology == 55 or symbology == 56 then return f32(0.33) end
+  -- MaxiCode, ISO/IEC 16023:2000 Table 7.
+  if symbology == 57 then return f32(0.88) end
+  -- USPS Intelligent Mail.
+  if symbology == 85 then return f32(0.591) end
   return f32(0.495)
 end
 
@@ -138,6 +151,7 @@ end
 function M.apply(symbol, opts)
   opts = opts or {}
   local warned = false
+  local pdf_rows
   local function warn(msg)
     if io and io.stderr then io.stderr:write(msg, "\n") end
     warned = true
@@ -286,9 +300,80 @@ function M.apply(symbol, opts)
     local val = tonumber(text)
     if val >= 1 and val <= 90 then
       if symbol.symbology == 81 then symbol.option_3 = val end
+      -- PDF417's store happens after the Data Matrix shape flags, because
+      -- the C assigns rows once the option loop is finished and that
+      -- assignment replaces option_3 rather than merging with it.
+      pdf_rows = val
     else
       warn(string.format(
         "Warning 112: Number of rows '%d' out of range (1 to 90), **IGNORED**",
+        val))
+    end
+  end
+
+  -- frontend/main.c OPT_MODE. MaxiCode's mode. Digits, 0 to 6. Shares
+  -- option_1 with --secure; this block is first, so --secure wins when
+  -- both are set. Do not combine them.
+  if not absent(opts.mode) then
+    local text = tostring(opts.mode)
+    if not text:match("^%d+$") then
+      return nil, "Error 136: Invalid mode value (digits only)"
+    end
+    local val = tonumber(text)
+    if val <= 6 then
+      symbol.option_1 = val
+    else
+      warn(string.format(
+        "Warning 116: Mode value '%d' out of range (0 to 6), **IGNORED**",
+        val))
+    end
+  end
+
+  -- frontend/main.c OPT_SECURE. PDF417's error-correction level and Aztec's
+  -- ECC percentage. Digits, 0 to 8. Applied after --mode.
+  if not absent(opts.secure) then
+    local text = tostring(opts.secure)
+    if not text:match("^%d+$") then
+      return nil, "Error 134: Invalid ECC value (digits only)"
+    end
+    local val = tonumber(text)
+    if val <= 8 then
+      symbol.option_1 = val
+    else
+      warn(string.format(
+        "Warning 114: ECC level '%d' out of range (0 to 8), **IGNORED**",
+        val))
+    end
+  end
+
+  -- frontend/main.c OPT_PRIMARY. MaxiCode's structured primary. The C
+  -- buffer is 128 bytes including the NUL, so 127 characters survive.
+  if not absent(opts.primary) then
+    local text = tostring(opts.primary)
+    if #text >= 128 then
+      symbol.primary = text:sub(1, 127)
+      warn(string.format(
+        "Warning 115: Primary data string too long (%d character maximum), **TRUNCATING**",
+        127))
+    else
+      symbol.primary = text
+    end
+  end
+
+  -- frontend/main.c OPT_SCMVV. MaxiCode structured-carrier version. Stored
+  -- as value + 1 on option_2, after --vers and --cols, so it wins when
+  -- those are also set. Do not combine them.
+  if not absent(opts.scmvv) then
+    local text = tostring(opts.scmvv)
+    if not text:match("^%d+$") then
+      return nil, "Error 149: Invalid Structured Carrier Message version value (digits only)"
+    end
+    local val = tonumber(text)
+    if val <= 99 then
+      symbol.option_2 = val + 1
+    else
+      warn(string.format(
+        "Warning 150: Structured Carrier Message version '%d' out of range (0 to 99), **IGNORED**",
         val))
     end
   end
@@ -430,6 +515,33 @@ function M.apply(symbol, opts)
   if opts.dotty then symbol.output_options = symbol.output_options | common.BARCODE_DOTTY_MODE end
   if opts.init then symbol.output_options = symbol.output_options | common.READER_INIT end
   if opts.notext then symbol.show_hrt = 0 end
+
+  -- Data Matrix shape flags. Square is applied after DMRE so it wins when
+  -- both are set, which is what the C does whichever order the arguments
+  -- arrived in. The low 7 bits are the shape; bit 128 (--dmiso144) is kept.
+  -- Expanded Stacked stores its row count in option_3, and that store is
+  -- the one that survives on symbology 81, so these flags leave 81 alone.
+  if symbol.symbology ~= 81 then
+    if opts.dmre and (symbol.option_3 & 0x7F) ~= 100 then
+      symbol.option_3 = 101 | (symbol.option_3 & ~0x7F)
+    end
+    if opts.square then
+      symbol.option_3 = 100 | (symbol.option_3 & ~0x7F)
+    end
+    if opts.dmiso144 then
+      symbol.option_3 = symbol.option_3 | 128
+    end
+  end
+  if opts.fast then symbol.input_mode = symbol.input_mode | common.FAST_MODE end
+  if opts.gssep then symbol.output_options = symbol.output_options | common.GS1_GS_SEPARATOR end
+
+  -- frontend/main.c, after the option loop. PDF417, Compact PDF417, and
+  -- Expanded Stacked are the symbologies here that keep --rows. Expanded
+  -- Stacked already stored it above, and the Data Matrix flags skip it.
+  -- This assignment replaces option_3.
+  if pdf_rows and (symbol.symbology == 55 or symbol.symbology == 56) then
+    symbol.option_3 = pdf_rows
+  end
 
   return angle, nil, warned
 end

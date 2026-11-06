@@ -5,9 +5,11 @@
 -- whole job is to divide the data polynomial by a generator polynomial over
 -- GF(2^8) and keep the remainder.
 --
--- Only the `unsigned char` variant is here. reedsol.c also has an `rs_uint_*`
--- family for Aztec's 12-bit symbols, and that family mallocs its log tables at
--- runtime instead of reading them from a header. Neither is reachable from QR.
+-- `encode` does not reverse the remainder. QR and Data Matrix undo that
+-- themselves. `encode_c` and `encode_uint` reverse, matching
+-- `zint_rs_encode` and `zint_rs_encode_uint`. `uint_init_gf` builds the
+-- log tables at runtime for Aztec's 10-bit and 12-bit fields, and
+-- `uint_encode` reverses to match `zint_rs_uint_encode`.
 --
 -- Two things about the arithmetic are worth stating up front, because they are
 -- the reason this file is short and fast rather than long and full of modulo:
@@ -28,11 +30,15 @@ local M = {}
 
 -- backend/reedsol.c `rs_init_gf()`. The C indexes a small dispatch table by
 -- `prime_poly >> 5` and stores raw pointers; here the field is looked up by the
--- polynomial itself, since there is no cycle to save. Only 0x11d is present
--- because only QR needs it -- Data Matrix would want 0x12d, Aztec 0x1069, and
--- both would be one line in the table generator plus one line here.
+-- polynomial itself, since there is no cycle to save. QR uses 0x11d. Data
+-- Matrix uses 0x12d. Aztec's mode message uses 0x13. MaxiCode and Aztec's
+-- 6-bit codewords use 0x43. The 10-bit and 12-bit fields are built by
+-- `uint_init_gf`, not stored here.
 local FIELDS = {
   [0x11d] = { logt = logs.logt_0x11d, alog = logs.alog_0x11d },
+  [0x12d] = { logt = logs.logt_0x12d, alog = logs.alog_0x12d },
+  [0x13]  = { logt = logs.logt_0x13,  alog = logs.alog_0x13 },
+  [0x43]  = { logt = logs.logt_0x43,  alog = logs.alog_0x43 },
 }
 
 -- Returns the `rs_t` equivalent: a plain table carrying the field tables, and
@@ -132,6 +138,56 @@ function M.encode(rs, datalen, data, res)
       res[0] = 0
     end
   end
+end
+
+-- backend/reedsol.c reverses the remainder before `zint_rs_encode` and
+-- `zint_rs_encode_uint` return. QR and Data Matrix still call `encode` and
+-- undo it themselves. Callers that copy `ecc[j]` straight across use this.
+local function reverse_res(res, nsym)
+  local half = nsym // 2
+  for i = 0, half - 1 do
+    res[i], res[nsym - 1 - i] = res[nsym - 1 - i], res[i]
+  end
+end
+
+function M.encode_c(rs, datalen, data, res)
+  M.encode(rs, datalen, data, res)
+  reverse_res(res, rs.nsym)
+end
+
+-- Same remainder as `encode_c`. The C takes `unsigned int` data so a codeword
+-- can sit above 255, which this loop already allows: it never masks to a byte.
+M.encode_uint = M.encode_c
+
+-- backend/reedsol.c `zint_rs_uint_init_gf()`. `logmod` is 1023 for 10-bit
+-- Aztec and 4095 for 12-bit. The antilog table is doubled so the encoder
+-- never reduces an index modulo `logmod`.
+function M.uint_init_gf(prime_poly, logmod)
+  local b = logmod + 1
+  local logt, alog = {}, {}
+  logt[0] = 0
+  local p = 1
+  for v = 0, logmod - 1 do
+    alog[v] = p
+    alog[logmod + v] = p
+    logt[p] = v
+    p = p << 1
+    if (p & b) ~= 0 then p = p ~ prime_poly end
+  end
+  return { logt = logt, alog = alog }
+end
+
+-- backend/reedsol.c `zint_rs_uint_init_code()`. Same generator as `init_code`.
+-- Coefficients stay inside the field, so the C's unsigned-short store does
+-- not truncate anything this port builds.
+function M.uint_init_code(rs, nsym, index)
+  M.init_code(rs, nsym, index)
+end
+
+-- backend/reedsol.c `zint_rs_uint_encode()`, including the reverse.
+function M.uint_encode(rs, datalen, data, res)
+  M.encode(rs, datalen, data, res)
+  reverse_res(res, rs.nsym)
 end
 
 return M

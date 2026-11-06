@@ -20,11 +20,19 @@ bash flags.sh
 bash colourdiff.sh
 bash upca.sh
 bash ean13.sh
+bash isbn.sh
 bash ean8.sh
 bash upce.sh
 bash c25inter.sh
 bash nve18.sh
 bash dbar.sh
 bash dbaromn.sh
+bash dmatrix.sh
+bash code128ab.sh
+bash flat.sh
+bash pdf417.sh
+bash maxicode.sh
+bash aztec.sh
+bash imail.sh
 bash fuzz.sh "${FUZZ_ROUNDS:-5}"
 bash stressqr.sh "${STRESS_ROUNDS:-1}"
