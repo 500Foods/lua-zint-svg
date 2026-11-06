@@ -1,9 +1,9 @@
 rockspec_format = "3.0"
 package = "lua-zint-svg"
-version = "0.2.0-1"
+version = "1.0.0-1"
 source = {
   url = "git+https://github.com/500Foods/lua-zint-svg.git",
-  tag = "v0.2.0",
+  tag = "v1.0.0",
 }
 description = {
   summary = "Pure Lua barcodes: Code 39, Code 128, GS1-128, UPC, EAN, ISBN, ITF, SSCC, QR, and Data Matrix",

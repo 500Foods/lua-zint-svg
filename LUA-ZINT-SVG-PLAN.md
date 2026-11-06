@@ -115,7 +115,7 @@ LICENSE
 NOTICE
 LUA-ZINT-SVG-PLAN.md
 README.md
-lua-zint-svg-0.2.0-1.rockspec
+lua-zint-svg-1.0.0-1.rockspec
 src/zint/init.lua              was lua-zint.lua; returns the module
 src/zint/*.lua                 svg.lua and pdf.lua format the same vector list
 bin/lua-zint                   bash-callable CLI, zint-style flags
@@ -136,7 +136,7 @@ Build the oracle with Qt and PNG off, into `vendor/zint/build/`. That directory 
 
 ## Rock and the report generator
 
-`lua-zint-svg-0.2.0-1.rockspec`, format 3.0, same shape as the doksuela rockspec. Package name `lua-zint-svg`, module name `zint`, homepage this GitHub repo, license `MIT`, dependency `lua >= 5.5`. `build.modules` lists each `src/zint/*.lua`. `bin/lua-zint` is installed as a script. No native dependency and no other rock dependency.
+`lua-zint-svg-1.0.0-1.rockspec`, format 3.0, same shape as the doksuela rockspec. Package name `lua-zint-svg`, module name `zint`, homepage this GitHub repo, license `MIT`, dependency `lua >= 5.5`. `build.modules` lists each `src/zint/*.lua`. `bin/lua-zint` is installed as a script. No native dependency and no other rock dependency.
 
 The report generator copies `src/zint` into its tree, or submodules this repo, and `require "zint"` resolves on `package.path`. `luarocks make` in this repo is how we check the rock. `luarocks upload` is how other people install it. Same files either way.
 
@@ -186,7 +186,7 @@ Tests come in two layers.
 
 ## Backlog
 
-Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in this tree: Interleaved 2 of 5 (3), Code 39 (8), EAN-8 (10), EAN-2 add-on (11), EAN-5 add-on (12), EAN-13 (15), GS1-128 (16), Code 128 (20), Flattermarken (28), GS1 DataBar Omnidirectional (29), GS1 DataBar Expanded (31), UPC-A (34), UPC-A with check digit (35), UPC-E (37), UPC-E with check digit (38), PDF417 (55), Compact PDF417 (56), MaxiCode (57), QR Code (58), Code 128 (Suppress Code Set C) (60), ISBN (69), Data Matrix (71), NVE-18 (75), GS1 DataBar Stacked Omnidirectional (80), GS1 DataBar Expanded Stacked (81), USPS Intelligent Mail (85), ITF-14 (89), Aztec (92).
+Refreshed from vendored `backend/zint.h` at 2.16.0. Legacy macros that share an id with a name below are omitted (`BARCODE_EAN128` is 16, `BARCODE_RSS14` is 29, and the rest of that kind). Shipped in 1.0.0: Interleaved 2 of 5 (3), Code 39 (8), EAN-8 (10), EAN-2 add-on (11), EAN-5 add-on (12), EAN-13 (15), GS1-128 (16), Code 128 (20), Flattermarken (28), GS1 DataBar Omnidirectional (29), GS1 DataBar Expanded (31), UPC-A (34), UPC-A with check digit (35), UPC-E (37), UPC-E with check digit (38), PDF417 (55), Compact PDF417 (56), MaxiCode (57), QR Code (58), Code 128 (Suppress Code Set C) (60), ISBN (69), Data Matrix (71), NVE-18 (75), GS1 DataBar Stacked Omnidirectional (80), GS1 DataBar Expanded Stacked (81), USPS Intelligent Mail (85), ITF-14 (89), Aztec (92).
 
 Not yet, by id:
 
