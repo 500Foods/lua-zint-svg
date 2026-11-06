@@ -60,113 +60,11 @@ This release draws these, by name or by id:
     EAN-5 add-on                  12
     ISBN                          69
 
-EAN-13 takes 12 digits and appends the check digit, or 13 digits
-and checks the one you supplied. EAN-8 does the same with 7 or 8.
-UPC-E takes 6 digits, or 7 with a number system of 0 or 1. Id 38
-requires the check digit. An EAN-8 add-on is drawn and warned as
-non-standard.
+Refer to GitHub for more information about each symbology.
 
-Interleaved 2 of 5 takes digits. An odd count grows a leading
-zero. vers 1 appends a GS1 check digit and shows it. vers 2
-appends it and leaves it off the human-readable line. ITF-14
-takes up to 14 digits, pads to 13, and appends or checks the GS1
-check digit. It draws a bearer box of 5 modules unless a box or
-bind is already set. ITF-14 always has a 10-module quiet zone.
-Interleaved 2 of 5 adds that zone only with quietzones.
+Needs Lua 5.5 or newer. The rock builds no C.             
 
-NVE-18 is the 18-digit SSCC, drawn as GS1-128. It takes up to 18
-digits, pads to 17, and appends or checks the GS1 check digit. The
-command-line name is nve18. Its quiet zone is added with quietzones.
-
-GS1 DataBar Omnidirectional takes up to 14 digits. Thirteen are
-padded and the check digit is appended. Fourteen must include the
-right check digit. A (01), [01], or leading 01 of the right length
-is stripped. Stacked Omnidirectional is the same symbol in two
-rows and has no human-readable line. Neither variant has a quiet
-zone. --gs1 is refused. The short names are dbaromn and dbaromnstk.
-
-GS1 DataBar Expanded takes a GS1 element string. Expanded Stacked
-is the same symbol broken into rows. cols sets the columns per row
-(1 to 11, default 2). rows sets the maximum rows (2 to 11) when
-cols is omitted. Stacked symbols have no human-readable line.
-Neither variant has a quiet zone. The short names are dbarexp and
-dbarexpstk.
-
-Data Matrix takes bytes. The short name is datamatrix. It has no
-human-readable line. vers picks a size from 1 to 48. square keeps
-the symbol square. dmre allows the rectangular DMRE sizes. fast
-uses the look-ahead encodation. A 144x144 symbol uses the de-facto
-ECC arrangement unless dmiso144 is set. The quiet zone is one
-module on each side, and only with quietzones. gs1 encodes an
-element string. gssep stores the GS separator as data. init writes
-a reader-initialisation symbol and is refused in GS1 mode. dotty
-draws the modules as dots.
-
-EAN-2 and EAN-5 are the magazine add-ons, drawn on their own. The
-short names are ean2 and ean5. A short digit string is padded with
-leading zeroes. The same add-on can hang off an EAN-13, a UPC-A, or
-a UPC-E. ISBN is drawn as EAN-13. The short names are isbn and
-isbnx. An ISBN-13 must begin with 978 or 979. An ISBN-10 or a
-9-digit SBN becomes 978 plus the body. The human-readable line is
-the EAN-13 digits.
-
-Code 128 suppress C is Code 128 that never uses code set C, so a
-run of digits stays in set A or B. The short names are code128ab
-and code128b. Its quiet zone is the same 10 modules as Code 128,
-and only with quietzones. Flattermarken draws one mark per digit
-and has no human-readable line. The short name is flat. It takes
-up to 128 digits and has no quiet zone.
-
-PDF417 takes bytes and has no human-readable line. The short name
-is pdf417. Compact PDF417 drops the right row indicator and the
-stop pattern. Its short names are pdf417comp and pdf417trunc.
-secure sets the error correction level from 0 to 8. The default
-lets the symbol choose. cols sets the data columns from 1 to 30.
-rows sets the rows from 3 to 90. The quiet zone is two modules on
-each side, and only with quietzones.
-
-MaxiCode draws a hexagonal grid and a bullseye. The short name is
-maxicode. It has no human-readable line. mode selects modes 2 to 6.
-With no mode and no primary message the symbol is mode 4. Modes 2
-and 3 read primary. scmvv sets the Structured Carrier Message
-version. The quiet zone is one module on each side, and only with
-quietzones. dotty is refused.
-
-Aztec takes bytes. The short names are aztec and azteccode. It has
-no human-readable line and no quiet zone. vers picks a size from 1
-to 36. Sizes 1 to 4 are compact. secure sets the error correction
-level from 1 to 4. The default is 2. gs1 encodes an element string.
-init writes a reader-initialisation symbol and is refused in GS1
-mode. dotty draws the modules as dots.
-
-USPS Intelligent Mail takes a 20-digit tracking code, and an
-optional ZIP of 5, 9, or 11 digits after a hyphen. The short name
-is uspsimail. It has no human-readable line. The quiet zone is
-added with quietzones.
-
-UPC and EAN human-readable digits are placed at OCR-B advances.
-The report writer embeds OCR-B and uses those positions. The PDF
-form names Helvetica as a placeholder font. SVG draws those digits
-in the bundled OCR-B face and every other symbol in Arimo.
-
-lua-zint is the same library from the shell. Pass option values as
-strings.
-
-Not in this release: Code 93, MicroPDF417, the other postal symbols,
-and the other formats listed in the README.
-
-An unknown Application Identifier is Error 260 and a bad length is
-Error 259, and neither writes a file. A bad check digit or a bad
-date is Warning 261, and the symbol is still drawn. QR text that
-fits Latin-1 stays Latin-1. Shift JIS warns 760. Input that fits
-neither is drawn again under an automatic ECI and warns 222.
-
-An unknown filetype is Error 142. The PDF form names Helvetica
-and leaves the face to the report writer. See NOTICE.
-
-Needs Lua 5.5 or newer. The rock builds no C.
-
-Source, samples, and issues:
+Source, samples, and issues, or to request another zint-supported symbology:
 https://github.com/500Foods/lua-zint-svg
 https://github.com/500foods/lua-zint-svg/issues
 ]],
